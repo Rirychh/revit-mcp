@@ -1,0 +1,32 @@
+﻿Revit MCP 安裝說明
+==================
+
+讓 Claude Desktop 直接讀取與操作開著的 Revit 模型（查元件、出圖、標註、模型健檢等）。
+支援 Revit 2022、2023、2024、2025、2026、2027，會自動裝到這台電腦有的版本。
+
+【安裝前】
+1. 先存檔、關閉所有 Revit。
+2. 這台電腦要已經裝好 Claude Desktop，而且開過一次。
+3. 不需要另外安裝 Node.js，也不需要系統管理員權限。
+
+【安裝】
+1. 把整個 zip 解壓縮到任何資料夾（不要直接在 zip 裡面點）。
+2. 雙擊「_雙擊我_RevitMCP安裝.hta」。
+3. 按「安裝」。完成後：
+   - 重新開啟 Revit；
+   - 完全關閉 Claude Desktop（右下角系統匣圖示也要結束）再重新開啟。
+4. 在 Claude Desktop 對話中說「列出 Revit 裡的樓層」測試。
+
+【常見問題】
+- 「Revit 還開著」：請完全關閉 Revit（工作管理員裡也不能有 Revit.exe）。
+- 「找不到 Claude Desktop 的設定資料夾」：先安裝 Claude Desktop 並開過一次。
+- Revit 2022 有舊版裝在 ProgramData 時，安裝程式會把舊的停用；若提示需要系統管理員權限，
+  請在 HTA 檔上按右鍵「以系統管理員身分執行」。
+
+【移除】
+執行同一個安裝程式，按「移除 Revit MCP」。
+
+【檔案位置】
+- Revit 外掛：%APPDATA%\Autodesk\Revit\Addins\<版本>\RevitMcpAddin\
+- MCP 伺服器：%LOCALAPPDATA%\Rirychh\RevitMCP\
+- 安裝紀錄：%TEMP%\revitmcp_install.log

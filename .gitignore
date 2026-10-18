@@ -1,0 +1,18 @@
+# build
+bin/
+obj/
+dist/
+installer/out/
+node_modules/
+*.user
+# secrets / local state
+apikey.txt
+*.key
+public-key.txt
+issued.csv
+revoked.json
+.env
+# backups
+*.bak
+*.bak_*
+*.bak2*

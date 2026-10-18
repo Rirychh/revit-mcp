@@ -1,0 +1,7 @@
+<Project>
+  <!-- 每個 Revit 版本各自的 obj 資料夾，避免 restore 結果互相覆蓋 -->
+  <PropertyGroup>
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2024</RevitVersion>
+    <BaseIntermediateOutputPath>obj\Revit$(RevitVersion)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

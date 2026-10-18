@@ -1,0 +1,4765 @@
+{
+  "manifestVersion": 1,
+  "title": "Revit MCP tool manifest — single source of truth",
+  "authority": "RevitHttpServer.Route() in RevitHttpServer.cs is the authoritative capability list. Every arm of that routing table has exactly one entry in tools[]. If you add a route, add an entry here in the same commit.",
+  "naming": "Tool names follow the TypeScript MCP server (revit-mcp/src/tools/*.ts), because those are the names the user already calls from Claude Desktop. Where a route had no TS tool, a new name was coined in the same revit_<verb>_<noun> style.",
+  "routeArmCount": 86,
+  "toolCount": 86,
+  "consumers": {
+    "panel": "RevitMcpAddin Ai/RevitTools.cs — the Claude chat panel inside the Revit window. Loads this file as an embedded resource and generates its Anthropic tool definitions from it. Calls RevitHttpServer.Route() directly (in-process, via RevitApiExecutor/ExternalEvent) — it never goes over HTTP, so no token is involved.",
+    "mcp": "revit-mcp/src/index.ts — the Node MCP server for Claude Desktop. Goes over authenticated HTTP. NOT yet generated from this manifest; see tsCoverage on each entry."
+  },
+  "callingConvention": {
+    "pathParams": "Names listed in pathParams are substituted into the {placeholder} of route, and are NOT sent as query or body.",
+    "query": "For method GET, every input property that is not a pathParam becomes a query-string value.",
+    "body": "For method POST and PUT, every input property that is not a pathParam is serialized into a single JSON object sent as the request body.",
+    "omitted": "Properties the caller omits are simply not sent; the C# handler applies its own default. Defaults recorded here are informational, mirroring the handler.",
+    "apply": "Most write routes take apply or dryRun as a preview switch. Handler defaults are preview-safe (apply=false / dryRun=true) EXCEPT where destructive is true and alwaysWrites is set."
+  },
+  "flagSemantics": {
+    "readOnly": "true = never opens a Revit Transaction and never writes a file. Safe to call speculatively.",
+    "destructive": "true = can delete model elements, overwrite files, or write to the central model. Confirm with the user before calling with apply/dryRun set to write.",
+    "alwaysWrites": "true = the handler has NO preview switch; it opens a Transaction unconditionally on every call.",
+    "tsCoverage": "\"covered\" = a tool of this name already exists in revit-mcp/src. \"missing\" = route exists but the TS server does not expose it yet (work for the TS group)."
+  },
+  "infrastructure": [
+    {
+      "method": "GET",
+      "route": "/ping",
+      "handledIn": "RevitHttpServer.HandleRequest, before Route() is reached",
+      "note": "Liveness probe answered on the listener thread so it still responds when the Revit main thread is blocked by a modal dialog. Deliberately NOT a tool and deliberately not in tools[] — it is not an arm of Route(), so it cannot drift from this manifest."
+    }
+  ],
+  "tools": [
+    {
+      "name": "revit_instance_info",
+      "method": "GET",
+      "route": "/info",
+      "summary": "回報這個 Revit 實例的身分（埠、pid、版本、作用中文件與視圖、已開啟文件清單）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_instance_info",
+      "tsCoverage": "covered",
+      "notes": "多實例探索用基礎設施。MCP 端是在 revit_list_instances 內部掃埠時呼叫，不是當成一個工具；面板本身就跑在某一個 Revit 行程內，問「我是哪個實例」沒有意義（要查作用中模型請用 revit_document_info）。2026-10-03：已註冊為 MCP 工具（唯讀、無害，且讓工具數可機械核對），exposedTo 改為 ['mcp']；面板在 Revit 行程內，問「我是哪個實例」沒有意義，仍不露給面板。",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_build_family",
+      "method": "POST",
+      "route": "/families/build",
+      "summary": "依 JSON 規格從樣板建立族檔（.rfa）：加參數、幾何、嵌套族，存檔並可載入專案。不需先開啟專案。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_build_family",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為 overwrite 預設 true，會覆蓋 savePath 既有檔案。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "savePath": {
+            "type": "string",
+            "minLength": 5,
+            "description": "輸出 .rfa 完整路徑"
+          },
+          "template": {
+            "type": "string",
+            "description": "族樣板 .rft 路徑（省略用預設）"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": true,
+            "description": "已存在時覆蓋"
+          },
+          "typeName": {
+            "type": "string",
+            "description": "族類型名稱"
+          },
+          "parameters": {
+            "type": "array",
+            "default": [],
+            "description": "族參數定義",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "yesno",
+                    "length",
+                    "text",
+                    "integer",
+                    "number",
+                    "familyType"
+                  ]
+                },
+                "instance": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "value": {
+                  "type": "string",
+                  "description": "預設值。length 用 mm；yesno 用 '1'/'0'；familyType 填嵌套族名或 'Family:Type'"
+                },
+                "formula": {
+                  "type": "string",
+                  "description": "Revit 公式，例如 'not(四格)'"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "僅 familyType：品類，例如 DetailComponents / GenericAnnotation"
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ]
+            }
+          },
+          "nestedFamilies": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "放置嵌套實例前要先載入的 .rfa 完整路徑"
+          },
+          "elements": {
+            "type": "array",
+            "default": [],
+            "description": "幾何／內容元素",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "filledRegion",
+                    "maskingRegion",
+                    "glyph",
+                    "line",
+                    "nested",
+                    "label"
+                  ]
+                },
+                "loops": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  },
+                  "description": "filledRegion/maskingRegion：點迴圈（mm），多出來的迴圈變成洞"
+                },
+                "rects": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 4,
+                    "maxItems": 4
+                  },
+                  "description": "filledRegion/maskingRegion：[cx, cy, w, h] 矩形（mm）"
+                },
+                "color": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "description": "填滿區域／glyph 的 RGB"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "glyph：轉成填滿區域外框的文字（會隨視圖縮放）"
+                },
+                "font": {
+                  "type": "string",
+                  "description": "glyph：字型名稱，預設 Arial"
+                },
+                "capHeight": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "glyph：大寫字高（mm），預設 350"
+                },
+                "center": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "glyph：中心點（mm）"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "description": "line：折線點（mm）"
+                },
+                "closed": {
+                  "type": "boolean"
+                },
+                "family": {
+                  "type": "string",
+                  "description": "nested：族名（必須在 nestedFamilies 裡）"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "nested：類型名"
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "nested：插入點（mm）"
+                },
+                "typeParam": {
+                  "type": "string",
+                  "description": "nested：驅動此實例類型的 familyType 參數"
+                },
+                "visibleParam": {
+                  "type": "string",
+                  "description": "驅動可見性的 yes/no 參數"
+                },
+                "showEdges": {
+                  "type": "boolean",
+                  "description": "區域：保留邊界線（預設 false＝不可見）"
+                },
+                "paramMap": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "nested：{嵌套實例參數: 主體參數} 關聯，例如 {\"代號\":\"代號1\"}"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "label：已含標籤的 .rfa（API 無法建立標籤，只能複製）"
+                },
+                "sourceProjectFamily": {
+                  "type": "string",
+                  "description": "label：從作用中專案裡已載入的族複製標籤"
+                },
+                "sourceLabelText": {
+                  "type": "string",
+                  "description": "label：以範例文字挑選要複製的標籤"
+                },
+                "param": {
+                  "type": "string",
+                  "description": "label：把標籤的參數改名為此"
+                },
+                "paramInstance": {
+                  "type": "boolean",
+                  "description": "label：參數設為實例參數（預設 true）"
+                },
+                "paramValue": {
+                  "type": "string",
+                  "description": "label：預設文字"
+                },
+                "textSize": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "label：列印文字高度（mm）"
+                },
+                "textFont": {
+                  "type": "string",
+                  "description": "label：字型名稱"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          },
+          "loadIntoProject": {
+            "type": "boolean",
+            "default": false,
+            "description": "存檔後載入作用中專案"
+          },
+          "cleanTemplate": {
+            "type": "boolean",
+            "default": true,
+            "description": "刪掉某些樣板自帶的說明文字"
+          }
+        },
+        "required": [
+          "savePath"
+        ]
+      }
+    },
+    {
+      "name": "revit_scan_family_labels",
+      "method": "POST",
+      "route": "/families/labels",
+      "summary": "掃描 .rfa 檔／資料夾，或作用中專案裡的註解族，列出含標籤（label）的族及其族參數。不需先開啟專案。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_scan_family_labels",
+      "tsCoverage": "covered",
+      "notes": "唯讀但是 POST（參數太多塞不進查詢字串）。會以 EditFamily 開暫存族文件再 Close(false)，不存檔。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": ".rfa 檔或資料夾路徑"
+          },
+          "fromProject": {
+            "type": "boolean",
+            "default": false,
+            "description": "改掃作用中專案裡已載入的註解族"
+          },
+          "nameContains": {
+            "type": "string",
+            "description": "族名關鍵字過濾"
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 40,
+            "description": "最多回報幾個族"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_open_document",
+      "method": "POST",
+      "route": "/documents/open",
+      "summary": "開啟 .rvt（本機或 UNC 網路路徑）並設為作用中文件；已開啟則直接啟用。不需先開啟專案。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_open_document",
+      "tsCoverage": "covered",
+      "notes": "改變應用程式狀態（開啟並啟用文件），但不編輯模型內容。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": ".rvt 完整路徑"
+          },
+          "audit": {
+            "type": "boolean",
+            "default": false,
+            "description": "以「審核」模式開啟"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "revit_new_project",
+      "method": "POST",
+      "route": "/project/new",
+      "summary": "由樣板建立新專案，設定長度單位，可建中央檔並存檔開啟。不需先開啟專案。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_new_project",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為 overwrite 預設 true，會覆蓋 savePath 既有檔案。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "templatePath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "專案樣板 .rte 完整路徑"
+          },
+          "savePath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "新專案存檔完整路徑"
+          },
+          "lengthUnit": {
+            "type": "string",
+            "enum": [
+              "cm",
+              "mm",
+              "m"
+            ],
+            "description": "長度單位"
+          },
+          "central": {
+            "type": "boolean",
+            "default": false,
+            "description": "建立為中央檔（啟用工作共用）"
+          },
+          "levelsGridsWorkset": {
+            "type": "string",
+            "description": "標高與軸網的工作集名稱"
+          },
+          "defaultWorkset": {
+            "type": "string",
+            "description": "預設工作集名稱"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": true,
+            "description": "savePath 已存在時覆蓋"
+          },
+          "openAfterSave": {
+            "type": "boolean",
+            "default": true,
+            "description": "存檔後開啟"
+          }
+        },
+        "required": [
+          "templatePath",
+          "savePath"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_elements",
+      "method": "GET",
+      "route": "/elements",
+      "summary": "列出／統計模型元件，可依品類、樓層、視圖、族名、XY 範圍過濾並分頁。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_elements",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "string",
+            "description": "逗號分隔的品類名稱；優先於 category"
+          },
+          "category": {
+            "type": "string",
+            "description": "單一品類，例如 Walls / Doors / PlumbingFixtures"
+          },
+          "familyName": {
+            "type": "string",
+            "description": "逗號分隔的族名白名單（精確比對）"
+          },
+          "levelName": {
+            "type": "string",
+            "description": "樓層名稱（精確比對）"
+          },
+          "viewId": {
+            "type": "integer",
+            "description": "只取在此視圖可見的元件"
+          },
+          "minX": {
+            "type": "number",
+            "description": "範圍過濾 min X（mm）；minX/minY/maxX/maxY 必須四個都給"
+          },
+          "minY": {
+            "type": "number",
+            "description": "範圍過濾 min Y（mm）"
+          },
+          "maxX": {
+            "type": "number",
+            "description": "範圍過濾 max X（mm）"
+          },
+          "maxY": {
+            "type": "number",
+            "description": "範圍過濾 max Y（mm）"
+          },
+          "summary": {
+            "type": "boolean",
+            "default": false,
+            "description": "回傳族／類型統計而非逐筆元件"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "每頁筆數"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "分頁位移"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_create_element",
+      "method": "POST",
+      "route": "/elements",
+      "summary": "在指定座標放置一個族實例。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_element",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "familyName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "族名"
+          },
+          "typeName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "族內的類型名"
+          },
+          "levelName": {
+            "type": "string",
+            "description": "樓層名稱"
+          },
+          "x": {
+            "type": "number",
+            "default": 0,
+            "description": "X 座標（mm）"
+          },
+          "y": {
+            "type": "number",
+            "default": 0,
+            "description": "Y 座標（mm）"
+          },
+          "z": {
+            "type": "number",
+            "default": 0,
+            "description": "Z 座標（mm）"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "參數名 → 值"
+          }
+        },
+        "required": [
+          "familyName",
+          "typeName"
+        ]
+      }
+    },
+    {
+      "name": "revit_rotate_elements",
+      "method": "POST",
+      "route": "/elements/rotate",
+      "summary": "繞任意軸旋轉指定元件（可先預檢不套用）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_rotate_elements",
+      "tsCoverage": "covered",
+      "notes": "此 handler 用 JObject 索引讀取參數，鍵名大小寫敏感 —— 必須照這裡的拼法送。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "description": "要旋轉的元件 ElementId"
+          },
+          "angleDeg": {
+            "type": "number",
+            "default": 90,
+            "description": "旋轉角度（度）"
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "x",
+              "y",
+              "z"
+            ],
+            "default": "auto",
+            "description": "旋轉軸；auto＝取 bounding box 最薄的軸"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "location",
+              "bboxcenter"
+            ],
+            "default": "location",
+            "description": "旋轉中心"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_inspect_family",
+      "method": "POST",
+      "route": "/families/inspect",
+      "summary": "唯讀檢查族群：參考平面、視圖方向、幾何草圖平面。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_inspect_family",
+      "tsCoverage": "covered",
+      "notes": "以 EditFamily 開暫存族文件再 Close(false)，不存檔。鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "作用中專案裡的族名"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_align_elements_upright",
+      "method": "POST",
+      "route": "/elements/align-upright",
+      "summary": "把工作平面基礎的牆面族實例統一轉正（指定軸對齊世界上方）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_align_elements_upright",
+      "tsCoverage": "covered",
+      "notes": "需給 familyName 或 ids 其一。鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "familyName": {
+            "type": "string",
+            "description": "族名；與 ids 二擇一（ids 優先）"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 ElementId；與 familyName 二擇一"
+          },
+          "upAxis": {
+            "type": "string",
+            "enum": [
+              "X",
+              "Y"
+            ],
+            "default": "Y",
+            "description": "族的哪個軸要朝世界上方"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          },
+          "includeGrouped": {
+            "type": "boolean",
+            "default": false,
+            "description": "一併處理群組內的實例"
+          },
+          "tolDeg": {
+            "type": "number",
+            "default": 1,
+            "description": "容許誤差（度），差距小於此值就跳過"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_find_element_constraints",
+      "method": "POST",
+      "route": "/elements/constraints",
+      "summary": "唯讀：找出哪些尺寸標註／對齊約束參考到指定元件（搬不動元件時用來查兇手）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_find_element_constraints",
+      "tsCoverage": "covered",
+      "notes": "鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "要查約束的元件 ElementId"
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_ungroup_groups",
+      "method": "POST",
+      "route": "/groups/ungroup",
+      "summary": "解除指定的群組實例（只動被指名的 groupIds）。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_ungroup_groups",
+      "tsCoverage": "covered",
+      "notes": "解除群組不可用 Ctrl+Z 以外的方式還原。鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "群組實例 ElementId"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的解除"
+          }
+        },
+        "required": [
+          "groupIds"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_sync_with_central",
+      "method": "POST",
+      "route": "/sync",
+      "summary": "與中央模型同步（工作共用模型），可一併存本機檔與釋放工作集。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_sync_with_central",
+      "tsCoverage": "covered",
+      "notes": "apply=true 會寫入中央檔，對團隊所有人可見且無法回復。呼叫前務必先問使用者。鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝只回報將做什麼，true＝真的同步"
+          },
+          "comment": {
+            "type": "string",
+            "default": "",
+            "description": "同步註解"
+          },
+          "relinquish": {
+            "type": "boolean",
+            "default": true,
+            "description": "同步後釋放所有借用的工作集"
+          },
+          "compact": {
+            "type": "boolean",
+            "default": false,
+            "description": "同步時壓縮中央檔（較慢）"
+          },
+          "saveLocalBefore": {
+            "type": "boolean",
+            "default": true,
+            "description": "同步前先存本機檔"
+          },
+          "saveLocalAfter": {
+            "type": "boolean",
+            "default": true,
+            "description": "同步後再存本機檔"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_sync_status",
+      "method": "GET",
+      "route": "/sync/status",
+      "summary": "回報工作共用狀態：是否 workshared、中央檔路徑、使用者、是否有未存變更。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_sync_status",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_copy_elements",
+      "method": "POST",
+      "route": "/elements/copy",
+      "summary": "把既有天花設備佈局（燈具、撒水頭、風口、偵測器）複製到另一個樓層，可重新附著到天花。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_copy_elements",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "指定來源元件 ElementId"
+          },
+          "sourceLevelName": {
+            "type": "string",
+            "description": "來源樓層名稱"
+          },
+          "sourceViewId": {
+            "type": "integer",
+            "description": "來源視圖（只取該視圖可見的元件）"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "來源品類過濾"
+          },
+          "familyNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "來源族名過濾"
+          },
+          "bbox": {
+            "type": "object",
+            "description": "來源 XY 範圍（mm）",
+            "properties": {
+              "minX": {
+                "type": "number"
+              },
+              "minY": {
+                "type": "number"
+              },
+              "maxX": {
+                "type": "number"
+              },
+              "maxY": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "minX",
+              "minY",
+              "maxX",
+              "maxY"
+            ]
+          },
+          "targetLevelName": {
+            "type": "string",
+            "description": "複製到哪個樓層"
+          },
+          "dx": {
+            "type": "number",
+            "default": 0,
+            "description": "水平位移 X（mm）"
+          },
+          "dy": {
+            "type": "number",
+            "default": 0,
+            "description": "水平位移 Y（mm）"
+          },
+          "rehostToCeiling": {
+            "type": "boolean",
+            "default": true,
+            "description": "重新附著到目標樓層的天花"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝寫入模型"
+          }
+        },
+        "required": [
+          "targetLevelName"
+        ]
+      }
+    },
+    {
+      "name": "revit_snap_elements_to_grid",
+      "method": "POST",
+      "route": "/elements/snap",
+      "summary": "把既有元件的平面位置吸附到天花模矩格線（只動 XY，不動高程）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_snap_elements_to_grid",
+      "tsCoverage": "covered",
+      "notes": "elementIds 若非空，其餘過濾條件一律忽略。空 body 會丟錯，至少送 {}。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "指定元件；給了就忽略其他過濾條件"
+          },
+          "levelName": {
+            "type": "string",
+            "description": "樓層名稱過濾"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "品類過濾"
+          },
+          "familyNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "族名過濾"
+          },
+          "hostIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "只取附著在這些主體（天花）上的元件"
+          },
+          "bbox": {
+            "type": "object",
+            "description": "XY 範圍過濾（mm，專案座標）",
+            "properties": {
+              "minX": {
+                "type": "number"
+              },
+              "minY": {
+                "type": "number"
+              },
+              "maxX": {
+                "type": "number"
+              },
+              "maxY": {
+                "type": "number"
+              }
+            }
+          },
+          "moduleMm": {
+            "type": "number",
+            "default": 600,
+            "description": "格線模矩（mm）"
+          },
+          "originX": {
+            "type": "number",
+            "default": 0,
+            "description": "格線原點 X（mm）"
+          },
+          "originY": {
+            "type": "number",
+            "default": 0,
+            "description": "格線原點 Y（mm）"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "center",
+              "line"
+            ],
+            "default": "center",
+            "description": "吸附到格子中心或格線交點"
+          },
+          "sampleCount": {
+            "type": "integer",
+            "default": 8,
+            "description": "推估格線原點時的取樣數"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝寫入模型"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_list_linked_elements",
+      "method": "GET",
+      "route": "/elements/linked",
+      "summary": "列出「被連結的」Revit 模型（結構 ST、機電 MEP…）裡的元件。主模型的元件請用 revit_list_elements。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_linked_elements",
+      "tsCoverage": "covered",
+      "notes": "路由順序上必須排在 /elements/{id} 之前，否則 linked 會被當成 ElementId 解析。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Beams / Columns / Floors / Walls / Foundation 或 OST_ 名稱"
+          },
+          "source": {
+            "type": "string",
+            "description": "連結檔名關鍵字，例如 ST01"
+          },
+          "level": {
+            "type": "string",
+            "description": "連結內的樓層名關鍵字"
+          },
+          "family": {
+            "type": "string",
+            "description": "族名關鍵字"
+          },
+          "type": {
+            "type": "string",
+            "description": "類型名關鍵字"
+          },
+          "mark": {
+            "type": "string",
+            "description": "標記（Mark）關鍵字"
+          },
+          "minX": {
+            "type": "number",
+            "description": "範圍過濾 min X（mm）"
+          },
+          "minY": {
+            "type": "number",
+            "description": "範圍過濾 min Y（mm）"
+          },
+          "minZ": {
+            "type": "number",
+            "description": "範圍過濾 min Z（mm）"
+          },
+          "maxX": {
+            "type": "number",
+            "description": "範圍過濾 max X（mm）"
+          },
+          "maxY": {
+            "type": "number",
+            "description": "範圍過濾 max Y（mm）"
+          },
+          "maxZ": {
+            "type": "number",
+            "description": "範圍過濾 max Z（mm）"
+          },
+          "params": {
+            "type": "string",
+            "description": "逗號分隔的參數名，一併讀出"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50,
+            "description": "每頁筆數"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "分頁位移"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_get_element",
+      "method": "GET",
+      "route": "/elements/{elementId}",
+      "summary": "取得單一元件的完整資料與所有參數。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [
+        "elementId"
+      ],
+      "tsTool": "revit_get_element",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementId": {
+            "type": "integer",
+            "description": "元件 ElementId"
+          }
+        },
+        "required": [
+          "elementId"
+        ]
+      }
+    },
+    {
+      "name": "revit_modify_element",
+      "method": "PUT",
+      "route": "/elements/{elementId}",
+      "summary": "修改既有元件的一個或多個參數。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [
+        "elementId"
+      ],
+      "tsTool": "revit_modify_element",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementId": {
+            "type": "integer",
+            "description": "要修改的元件 ElementId"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "參數名 → 要設定的值"
+          }
+        },
+        "required": [
+          "elementId",
+          "parameters"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_levels",
+      "method": "GET",
+      "route": "/levels",
+      "summary": "列出所有樓層（標高，mm）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_levels",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_create_levels",
+      "method": "POST",
+      "route": "/levels",
+      "summary": "批次建立標高（樓層）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_levels",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "levels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 400,
+            "description": "要建立的標高",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "標高名稱（省略則自動命名）"
+                },
+                "elevationMm": {
+                  "type": "number",
+                  "description": "標高高程（mm）"
+                }
+              },
+              "required": [
+                "elevationMm"
+              ]
+            }
+          },
+          "skipExisting": {
+            "type": "boolean",
+            "default": true,
+            "description": "同高程已有標高時跳過"
+          }
+        },
+        "required": [
+          "levels"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_build_types",
+      "method": "GET",
+      "route": "/buildtypes",
+      "summary": "列出可用的牆類型或樓板類型（含厚度，mm）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_build_types",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "walls",
+              "floors"
+            ],
+            "default": "walls",
+            "description": "要列出牆類型還是樓板類型"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_create_walls",
+      "method": "POST",
+      "route": "/walls",
+      "summary": "沿一或多條折線在單一樓層建牆（含帷幕牆）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_walls",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "wallTypeName": {
+            "type": "string",
+            "description": "牆類型名稱（省略用預設）"
+          },
+          "levelName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "樓層名稱"
+          },
+          "heightMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "牆高（mm）"
+          },
+          "baseOffsetMm": {
+            "type": "number",
+            "default": 0,
+            "description": "基準偏移（mm）"
+          },
+          "loops": {
+            "type": "array",
+            "minItems": 1,
+            "description": "牆的折線",
+            "items": {
+              "type": "object",
+              "properties": {
+                "points": {
+                  "type": "array",
+                  "minItems": 2,
+                  "description": "折線點 [[x,y],...]（mm）",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "closed": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "是否閉合"
+                }
+              },
+              "required": [
+                "points"
+              ]
+            }
+          },
+          "minSegmentMm": {
+            "type": "number",
+            "default": 2,
+            "description": "小於此長度的線段忽略（mm）"
+          },
+          "structural": {
+            "type": "boolean",
+            "default": false,
+            "description": "建為結構牆"
+          }
+        },
+        "required": [
+          "levelName",
+          "heightMm",
+          "loops"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_floors",
+      "method": "POST",
+      "route": "/floors",
+      "summary": "批次在一或多個樓層建樓板（可含開口）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_floors",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "floorTypeName": {
+            "type": "string",
+            "description": "樓板類型名稱"
+          },
+          "newTypeName": {
+            "type": "string",
+            "description": "若要新建類型，給新類型名"
+          },
+          "thicknessMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "新類型厚度（mm）"
+          },
+          "minSegmentMm": {
+            "type": "number",
+            "default": 2,
+            "description": "小於此長度的線段忽略（mm）"
+          },
+          "floors": {
+            "type": "array",
+            "minItems": 1,
+            "description": "要建的樓板",
+            "items": {
+              "type": "object",
+              "properties": {
+                "levelName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "樓層名稱"
+                },
+                "outer": {
+                  "type": "array",
+                  "minItems": 3,
+                  "description": "外輪廓 [[x,y],...]（mm）",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "openings": {
+                  "type": "array",
+                  "description": "開口輪廓",
+                  "items": {
+                    "type": "array",
+                    "minItems": 3,
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  }
+                },
+                "heightOffsetMm": {
+                  "type": "number",
+                  "default": 0,
+                  "description": "相對樓層的高程偏移（mm）"
+                }
+              },
+              "required": [
+                "levelName",
+                "outer"
+              ]
+            }
+          }
+        },
+        "required": [
+          "floors"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_columns",
+      "method": "POST",
+      "route": "/columns",
+      "summary": "以 DirectShape 建圓柱（歸在結構柱品類）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_columns",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "各柱位置",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "description": "圓心 X（mm）"
+                },
+                "y": {
+                  "type": "number",
+                  "description": "圓心 Y（mm）"
+                },
+                "radiusMm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "此柱半徑（mm），覆寫 diameterMm"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            }
+          },
+          "diameterMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "全部柱的直徑（mm）"
+          },
+          "baseMm": {
+            "type": "number",
+            "default": 0,
+            "description": "柱底高程（mm）"
+          },
+          "topMm": {
+            "type": "number",
+            "description": "柱頂高程（mm）"
+          }
+        },
+        "required": [
+          "columns",
+          "topMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_rooms",
+      "method": "GET",
+      "route": "/rooms",
+      "summary": "列出房間（id、名稱、編號、面積 m²、樓層）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_rooms",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "levelName": {
+            "type": "string",
+            "description": "樓層名稱（精確比對）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_list_linked_rooms",
+      "method": "GET",
+      "route": "/rooms/linked",
+      "summary": "跨主模型與所有 Revit 連結列出房間（含中心點座標，mm）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_linked_rooms",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "房間名稱關鍵字"
+          },
+          "level": {
+            "type": "string",
+            "description": "樓層名稱關鍵字"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_create_room_views",
+      "method": "POST",
+      "route": "/rooms/views",
+      "summary": "為房間批次建立平面放大圖與立面圖（含裁剪範圍與視圖樣板）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_room_views",
+      "tsCoverage": "covered",
+      "notes": "空 body 會丟錯，至少送 {}。planName/elevName 支援 {room}、{name}、{level} 代換。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "roomNumbers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "房間編號清單；給了就忽略 nameContains"
+          },
+          "nameContains": {
+            "type": "string",
+            "description": "房間名稱關鍵字"
+          },
+          "scale": {
+            "type": "integer",
+            "default": 50,
+            "description": "視圖比例分母（1:n）"
+          },
+          "marginMm": {
+            "type": "number",
+            "default": 500,
+            "description": "裁剪範圍外擴（mm）"
+          },
+          "elevationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4,
+            "default": 4,
+            "description": "每房間要幾張立面（0–4）"
+          },
+          "depthMm": {
+            "type": "number",
+            "default": 5000,
+            "description": "立面視深（mm）"
+          },
+          "topMm": {
+            "type": "number",
+            "default": 3000,
+            "description": "立面頂部高程（mm）"
+          },
+          "bottomMm": {
+            "type": "number",
+            "default": -300,
+            "description": "立面底部高程（mm）"
+          },
+          "planTemplate": {
+            "type": "string",
+            "description": "平面視圖樣板名稱"
+          },
+          "elevTemplate": {
+            "type": "string",
+            "description": "立面視圖樣板名稱"
+          },
+          "planName": {
+            "type": "string",
+            "default": "{room}_plan",
+            "description": "平面視圖命名樣式"
+          },
+          "elevName": {
+            "type": "string",
+            "default": "{room}_elev",
+            "description": "立面視圖命名樣式（會再加 a/b/c/d）"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝寫入模型"
+          },
+          "alignElevToRoom": {
+            "type": "boolean",
+            "default": false,
+            "description": "立面方向對齊房間長邊"
+          },
+          "elevAngleDeg": {
+            "type": "number",
+            "description": "直接指定立面角度（度），覆寫 alignElevToRoom"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_sheet_layout",
+      "method": "GET",
+      "route": "/sheets/layout",
+      "summary": "列出圖紙的圖框尺寸與已放的視埠（視圖名、中心、寬高，皆為圖紙 mm）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_sheet_layout",
+      "tsCoverage": "covered",
+      "notes": "TS 端這個參數叫 numberContains，送出前改名為 number。此處用線路上的真名 number。值的比對是大小寫敏感的。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "圖號或圖名關鍵字（大小寫敏感）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_batch_create_sheets",
+      "method": "POST",
+      "route": "/sheets/batch-create",
+      "summary": "批次建立圖紙（自動沿用標題欄類型，已存在的圖號跳過）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_batch_create_sheets",
+      "tsCoverage": "covered",
+      "notes": "與 revit_create_sheet（POST /sheets/create）不同：這支只建空圖紙、可一次很多張，不放視圖。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sheets": {
+            "type": "array",
+            "minItems": 1,
+            "description": "要建立的圖紙",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "string",
+                  "description": "圖號"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "圖名"
+                }
+              },
+              "required": [
+                "number",
+                "name"
+              ]
+            }
+          },
+          "titleblockFrom": {
+            "type": "string",
+            "description": "複製哪張圖紙（圖號）的標題欄類型；省略則取任一種"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝寫入模型"
+          }
+        },
+        "required": [
+          "sheets"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_place_views",
+      "method": "POST",
+      "route": "/sheets/place",
+      "summary": "把視圖放進「既有」圖紙（新增視埠）。一次一張圖紙，可放多個視圖。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_place_views",
+      "tsCoverage": "covered",
+      "notes": "TS 端用 x/y/apply，送出前改名成 xMm/yMm/dryRun。此處用線路上的真名。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sheetNumber": {
+            "type": "string",
+            "description": "目標圖紙圖號（必須已存在）"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "description": "要放的視圖",
+            "items": {
+              "type": "object",
+              "properties": {
+                "viewId": {
+                  "type": "integer",
+                  "description": "視圖 ElementId（與 viewName 二擇一）"
+                },
+                "viewName": {
+                  "type": "string",
+                  "description": "視圖名稱（與 viewId 二擇一）"
+                },
+                "xMm": {
+                  "type": "number",
+                  "description": "視埠中心在圖紙上的 X（mm）"
+                },
+                "yMm": {
+                  "type": "number",
+                  "description": "視埠中心在圖紙上的 Y（mm）"
+                }
+              },
+              "required": [
+                "xMm",
+                "yMm"
+              ]
+            }
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝寫入模型"
+          }
+        },
+        "required": [
+          "sheetNumber",
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_documents",
+      "method": "GET",
+      "route": "/documents",
+      "summary": "列出所有已開啟的非連結文件（title、path、是否作用中、是否已修改、是否族檔、是否工作共用）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_documents",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_close_document",
+      "method": "POST",
+      "route": "/documents/close",
+      "summary": "關閉指定的已開啟文件（可選擇存檔或丟棄變更）。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_close_document",
+      "tsCoverage": "covered",
+      "notes": "force=true 會丟棄未存檔的變更，無法復原。title 需精確等於 Document.Title 或 Document.PathName。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "文件 Title 或完整路徑（精確比對）"
+          },
+          "save": {
+            "type": "boolean",
+            "default": false,
+            "description": "關閉前先存檔"
+          },
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "丟棄未存檔變更強制關閉"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝預檢，false＝真的關閉"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_update_view_properties",
+      "method": "POST",
+      "route": "/drafting/view/update",
+      "summary": "修改視圖的比例與名稱。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_update_view_properties",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入。對任何視圖都有效，不限製圖視圖（路由字面在 /drafting 下只是歷史因素）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "scale": {
+            "type": "integer",
+            "description": "新比例分母（1:n）；省略＝不改"
+          },
+          "name": {
+            "type": "string",
+            "description": "新視圖名稱；省略或空白＝不改"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_delete_elements",
+      "method": "POST",
+      "route": "/drafting/delete",
+      "summary": "依 ElementId 刪除作用中模型裡的元素（任何品類：模型構件、註解、製圖線等）。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_delete_elements",
+      "tsCoverage": "covered",
+      "notes": "路由字面在 /drafting 下只是歷史因素，實際對所有品類有效。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "maxItems": 2000,
+            "description": "要刪除的元件 ElementId"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的刪除"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_drafting_types",
+      "method": "GET",
+      "route": "/drafting/types",
+      "summary": "列出可用的製圖視圖族類型、文字類型、線型式。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_drafting_types",
+      "tsCoverage": "covered",
+      "notes": "handler 不讀任何查詢字串參數。",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_create_drafting_view",
+      "method": "POST",
+      "route": "/drafting/view",
+      "summary": "建立製圖視圖（索引表、位置配置圖用）；同名已存在則回傳既有的。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_drafting_view",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "視圖名稱"
+          },
+          "scale": {
+            "type": "integer",
+            "default": 100,
+            "description": "比例分母（1:n）"
+          },
+          "viewFamilyTypeName": {
+            "type": "string",
+            "description": "製圖視圖族類型名稱；省略取第一個"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_add_drafting_content",
+      "method": "POST",
+      "route": "/drafting/content",
+      "summary": "在製圖視圖裡畫框線、線段與文字（含引線）。座標單位是「圖面 mm」。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_drafting_content",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "製圖視圖 ElementId"
+          },
+          "boxes": {
+            "type": "array",
+            "description": "矩形框線",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "description": "左下 X（圖面 mm）"
+                },
+                "y": {
+                  "type": "number",
+                  "description": "左下 Y（圖面 mm）"
+                },
+                "w": {
+                  "type": "number",
+                  "description": "寬（mm）"
+                },
+                "h": {
+                  "type": "number",
+                  "description": "高（mm）"
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "w",
+                "h"
+              ]
+            }
+          },
+          "lines": {
+            "type": "array",
+            "description": "線段",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x1": {
+                  "type": "number"
+                },
+                "y1": {
+                  "type": "number"
+                },
+                "x2": {
+                  "type": "number"
+                },
+                "y2": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x1",
+                "y1",
+                "x2",
+                "y2"
+              ]
+            }
+          },
+          "texts": {
+            "type": "array",
+            "description": "文字（可帶引線）",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "default": 0,
+                  "description": "文字位置 X（圖面 mm）"
+                },
+                "y": {
+                  "type": "number",
+                  "default": 0,
+                  "description": "文字位置 Y（圖面 mm）"
+                },
+                "text": {
+                  "type": "string",
+                  "default": "",
+                  "description": "文字內容"
+                },
+                "rotationDeg": {
+                  "type": "number",
+                  "default": 0,
+                  "description": "旋轉角度（度）"
+                },
+                "align": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "center",
+                    "right"
+                  ],
+                  "default": "left",
+                  "description": "水平對齊"
+                },
+                "vAlign": {
+                  "type": "string",
+                  "enum": [
+                    "top",
+                    "middle",
+                    "bottom"
+                  ],
+                  "default": "top",
+                  "description": "垂直對齊"
+                },
+                "textTypeName": {
+                  "type": "string",
+                  "description": "文字類型名稱；省略用請求層級的 textTypeName"
+                },
+                "widthMm": {
+                  "type": "number",
+                  "description": "文字框寬度（mm）；省略＝單行不折行"
+                },
+                "leaderX": {
+                  "type": "number",
+                  "description": "引線端點 X（mm）"
+                },
+                "leaderY": {
+                  "type": "number",
+                  "description": "引線端點 Y（mm）"
+                },
+                "leaderElbowX": {
+                  "type": "number",
+                  "description": "引線轉折點 X（mm）"
+                },
+                "leaderElbowY": {
+                  "type": "number",
+                  "description": "引線轉折點 Y（mm）"
+                },
+                "leaderSide": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "left",
+                    "right"
+                  ],
+                  "default": "auto",
+                  "description": "引線從文字哪一側出來"
+                },
+                "leaderArc": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "引線用弧線"
+                }
+              }
+            }
+          },
+          "textTypeName": {
+            "type": "string",
+            "description": "請求層級的預設文字類型"
+          },
+          "lineStyleName": {
+            "type": "string",
+            "description": "線型式名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_clear_drafting_view",
+      "method": "POST",
+      "route": "/drafting/clear",
+      "summary": "清掉視圖裡所有細部線與文字，方便整張重畫。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_clear_drafting_view",
+      "tsCoverage": "covered",
+      "notes": "整個視圖的 CurveElement 與 TextNote 全刪。要只刪特定幾個請改用 revit_delete_elements。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的清除"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_list_views",
+      "method": "GET",
+      "route": "/views",
+      "summary": "列出非樣板視圖（id、名稱、類型、樓層、比例、所在圖號）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_views",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewType": {
+            "type": "string",
+            "description": "視圖類型過濾，例如 FloorPlan / Section / ThreeD"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_create_view",
+      "method": "POST",
+      "route": "/views",
+      "summary": "建立新視圖（平面／剖面／3D）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_view",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewType": {
+            "type": "string",
+            "enum": [
+              "FloorPlan",
+              "Section",
+              "3D"
+            ],
+            "description": "視圖類型"
+          },
+          "levelName": {
+            "type": "string",
+            "description": "樓層名稱（FloorPlan 必填）"
+          },
+          "name": {
+            "type": "string",
+            "description": "自訂視圖名稱"
+          }
+        },
+        "required": [
+          "viewType"
+        ]
+      }
+    },
+    {
+      "name": "revit_crop_view",
+      "method": "POST",
+      "route": "/views/crop",
+      "summary": "重設視圖裁剪範圍，讓它停在界定房間的結構牆上（廁所詳圖之類的放大圖用）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_crop_view",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "room",
+              "bounding",
+              "extent",
+              "manual"
+            ],
+            "default": "room",
+            "description": "裁剪依據"
+          },
+          "seedElementId": {
+            "type": "integer",
+            "description": "用這個元件（例如完成面背牆）覆寫自動偵測到的房間"
+          },
+          "roomSearchDepthMm": {
+            "type": "number",
+            "default": 8000,
+            "description": "自動偵測房間時往視圖內取樣多深（mm）"
+          },
+          "wallRun": {
+            "type": "string",
+            "enum": [
+              "perpendicular",
+              "any"
+            ],
+            "default": "perpendicular",
+            "description": "只認垂直於視圖方向的牆，或任何走向的牆"
+          },
+          "leftMm": {
+            "type": "number",
+            "description": "manual 模式：裁剪框左緣（mm）"
+          },
+          "rightMm": {
+            "type": "number",
+            "description": "manual 模式：裁剪框右緣（mm）"
+          },
+          "bottomMm": {
+            "type": "number",
+            "description": "manual 模式：裁剪框下緣（mm）"
+          },
+          "topMm": {
+            "type": "number",
+            "description": "manual 模式：裁剪框上緣（mm）"
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical",
+              "both"
+            ],
+            "default": "horizontal",
+            "description": "要調整哪個方向"
+          },
+          "minThicknessMm": {
+            "type": "number",
+            "default": 120,
+            "description": "多厚才算結構牆（mm）"
+          },
+          "includeTypeNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "類型名關鍵字白名單，預設 [\"輕隔間\"]"
+          },
+          "excludeTypeNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "類型名關鍵字黑名單"
+          },
+          "wallEdge": {
+            "type": "string",
+            "enum": [
+              "inner",
+              "outer"
+            ],
+            "default": "inner",
+            "description": "切在牆的內側面或外側面"
+          },
+          "paddingMm": {
+            "type": "number",
+            "default": 0,
+            "description": "再外擴（負值內縮）（mm）"
+          },
+          "searchPaddingMm": {
+            "type": "number",
+            "default": 2000,
+            "description": "在目前裁剪範圍外多找多遠（mm）"
+          },
+          "includeLinks": {
+            "type": "boolean",
+            "default": true,
+            "description": "一併搜尋連結模型裡的牆"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "直接指定要框住的主體元件，跳過所有規則"
+          },
+          "cropVisible": {
+            "type": "boolean",
+            "description": "顯示／隱藏裁剪邊界；省略＝不改"
+          },
+          "annotationCropMm": {
+            "type": "number",
+            "default": 0,
+            "description": "註解裁剪比模型裁剪往外推多少（mm）；0＝不動"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_duplicate_views",
+      "method": "POST",
+      "route": "/views/duplicate",
+      "summary": "複製視圖（含詳圖／不含詳圖／從屬）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_duplicate_views",
+      "tsCoverage": "covered",
+      "notes": "鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "views": {
+            "type": "array",
+            "minItems": 1,
+            "description": "要複製的視圖",
+            "items": {
+              "type": "object",
+              "properties": {
+                "viewId": {
+                  "type": "integer",
+                  "description": "視圖 ElementId"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "新視圖名稱；省略＝「<原名> 複製」"
+                }
+              },
+              "required": [
+                "viewId"
+              ]
+            }
+          },
+          "option": {
+            "type": "string",
+            "enum": [
+              "withDetailing",
+              "plain",
+              "dependent"
+            ],
+            "default": "withDetailing",
+            "description": "複製方式"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "views"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_rotate_view_crop",
+      "method": "POST",
+      "route": "/views/rotate-crop",
+      "summary": "旋轉平面視圖的裁剪範圍（把斜的量體轉成水平垂直）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_rotate_view_crop",
+      "tsCoverage": "covered",
+      "notes": "angleDeg、alignWallId、alignRoomId 需給其一（angleDeg 優先）。鍵名大小寫敏感（JObject）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "平面視圖 ElementId"
+          },
+          "angleDeg": {
+            "type": "number",
+            "description": "旋轉角度（度，逆時針為正）"
+          },
+          "alignWallId": {
+            "type": "integer",
+            "description": "改用某道直牆的方向推算角度"
+          },
+          "alignRoomId": {
+            "type": "integer",
+            "description": "改用某元件 bounding box 長邊推算角度"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_list_view_templates",
+      "method": "GET",
+      "route": "/views/templates",
+      "summary": "列出所有視圖樣板（id、名稱、視圖類型、目前套用的視圖數）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_view_templates",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_apply_view_template",
+      "method": "POST",
+      "route": "/views/template",
+      "summary": "把視圖樣板套用到多個視圖。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_apply_view_template",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "description": "目標視圖 ElementId"
+          },
+          "templateName": {
+            "type": "string",
+            "description": "樣板名稱（與 templateId 二擇一）"
+          },
+          "templateId": {
+            "type": "integer",
+            "description": "樣板 ElementId（與 templateName 二擇一）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_category_visibility",
+      "method": "POST",
+      "route": "/views/categories",
+      "summary": "在視圖中隱藏或顯示品類（可見性／圖形取代）。連結模型設為「依主體視圖」時對連結內同品類也有效。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_category_visibility",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "description": "目標視圖 ElementId"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "品類名稱"
+          },
+          "hidden": {
+            "type": "boolean",
+            "default": true,
+            "description": "true＝隱藏，false＝顯示"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewIds",
+          "categories"
+        ]
+      }
+    },
+    {
+      "name": "revit_screenshot_view",
+      "method": "GET",
+      "route": "/views/{viewId}/screenshot",
+      "summary": "把指定視圖輸出成 PNG 到暫存檔，回傳影像資訊。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [
+        "viewId"
+      ],
+      "tsTool": "revit_screenshot_view",
+      "tsCoverage": "covered",
+      "notes": "面板舊版把這支叫 revit_take_screenshot、參數叫 view_id —— 已統一為 TS 的 revit_screenshot_view / viewId。readOnly 標 false 因為它會寫檔到磁碟（並會短暫切換作用中視圖）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_sheets",
+      "method": "GET",
+      "route": "/sheets",
+      "summary": "列出所有圖紙（id、圖號、圖名）、可用圖框類型，以及目前的開啟畫面 viewId。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_sheets",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_create_sheet",
+      "method": "POST",
+      "route": "/sheets/create",
+      "summary": "建立新圖紙，可同時放入視圖並設為開啟畫面。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_sheet",
+      "tsCoverage": "covered",
+      "notes": "一次一張、可同時排圖。要一次建很多張空圖紙請用 revit_batch_create_sheets。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "圖號"
+          },
+          "name": {
+            "type": "string",
+            "description": "圖名"
+          },
+          "titleBlock": {
+            "type": "string",
+            "description": "圖框類型名稱"
+          },
+          "views": {
+            "type": "array",
+            "description": "要放入的視圖",
+            "items": {
+              "type": "object",
+              "properties": {
+                "viewId": {
+                  "type": "integer",
+                  "description": "視圖 ElementId"
+                },
+                "x": {
+                  "type": "number",
+                  "description": "視埠中心 X（圖紙 mm）"
+                },
+                "y": {
+                  "type": "number",
+                  "description": "視埠中心 Y（圖紙 mm）"
+                }
+              },
+              "required": [
+                "viewId"
+              ]
+            }
+          },
+          "setStartingView": {
+            "type": "boolean",
+            "default": false,
+            "description": "設為模型開啟畫面"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "number",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_starting_view",
+      "method": "POST",
+      "route": "/sheets/starting-view",
+      "summary": "設定模型開啟時的起始畫面。給 sheetNumber 或 viewId 其一。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_starting_view",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sheetNumber": {
+            "type": "string",
+            "description": "圖號（與 viewId 二擇一）"
+          },
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId（與 sheetNumber 二擇一）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_export_sheets_pdf",
+      "method": "POST",
+      "route": "/sheets/export-pdf",
+      "summary": "依圖號批次輸出 PDF，每張一檔，檔名「圖號{separator}圖名.pdf」。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_sheets_pdf",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為 overwrite=true 會覆蓋資料夾裡同名 PDF。不改模型。可能跑很久（30 分鐘逾時）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sheetNumbers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "要輸出的圖號"
+          },
+          "folder": {
+            "type": "string",
+            "description": "輸出資料夾"
+          },
+          "separator": {
+            "type": "string",
+            "default": "_",
+            "description": "圖號與圖名之間的分隔字元"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false,
+            "description": "覆蓋同名檔"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的輸出"
+          }
+        },
+        "required": [
+          "sheetNumbers",
+          "folder"
+        ]
+      }
+    },
+    {
+      "name": "revit_write_revision_notes",
+      "method": "POST",
+      "route": "/sheets/revision-notes",
+      "summary": "把修正說明寫進各圖紙圖框的「修訂內容」欄（新增 TextNote，自動在、，處換行）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_write_revision_notes",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "description": "每張圖紙要寫的內容",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sheetNumber": {
+                  "type": "string",
+                  "description": "圖號"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "修訂說明文字"
+                }
+              },
+              "required": [
+                "sheetNumber",
+                "text"
+              ]
+            }
+          },
+          "textTypeName": {
+            "type": "string",
+            "description": "文字類型名稱"
+          },
+          "titleBlocks": {
+            "type": "object",
+            "description": "各圖框類型的欄位座標設定：{圖框類型名: {x, y, dy, chars, maxLines}}",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "description": "欄位起點 X（圖紙 mm）"
+                },
+                "y": {
+                  "type": "number",
+                  "description": "欄位起點 Y（圖紙 mm）"
+                },
+                "dy": {
+                  "type": "number",
+                  "description": "每行行距（mm）"
+                },
+                "chars": {
+                  "type": "integer",
+                  "description": "每行幾個字"
+                },
+                "maxLines": {
+                  "type": "integer",
+                  "description": "最多幾行"
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "dy",
+                "chars",
+                "maxLines"
+              ]
+            }
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_revisions",
+      "method": "GET",
+      "route": "/revisions",
+      "summary": "列出專案所有修訂（id、順序、描述、日期、雲形線數量）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_revisions",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_annotate_revision_clouds",
+      "method": "POST",
+      "route": "/revisions/cloud-notes",
+      "summary": "在指定修訂的每個雲形線右上角加文字＋直線引線，文字依雲形線所在圖紙的圖號從 notes 取。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_annotate_revision_clouds",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "revisionId": {
+            "type": "integer",
+            "description": "修訂 ElementId"
+          },
+          "notes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "{圖號: 說明文字}"
+          },
+          "textTypeName": {
+            "type": "string",
+            "description": "文字類型名稱"
+          },
+          "offsetMm": {
+            "type": "number",
+            "default": 4,
+            "description": "文字距雲形線的偏移（圖紙 mm）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "revisionId",
+          "notes"
+        ]
+      }
+    },
+    {
+      "name": "revit_export_ifc",
+      "method": "POST",
+      "route": "/export/ifc",
+      "summary": "把作用中模型匯出為 IFC 2x3 CV2 檔。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_ifc",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為會覆蓋 outputPath 既有檔案。不改模型。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "outputPath": {
+            "type": "string",
+            "description": "輸出檔完整路徑（省略用預設位置）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_export_schedule",
+      "method": "POST",
+      "route": "/export/schedule",
+      "summary": "把一個或多個明細表視圖匯出為 CSV。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_schedule",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為會覆蓋輸出資料夾裡的同名 CSV。不改模型。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "outputPath": {
+            "type": "string",
+            "description": "輸出資料夾路徑"
+          },
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "指定要匯出的明細表視圖 ElementId（省略＝全部）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_close_lines",
+      "method": "POST",
+      "route": "/lines/close-loop",
+      "summary": "調整一組直線的端點，吸附成封閉且不自相交的迴圈（出圖用）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_close_lines",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 2,
+            "description": "直線（細部線／模型線）的 ElementId"
+          },
+          "toleranceMm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "default": 3,
+            "description": "端點吸附容差（mm）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_property_line",
+      "method": "POST",
+      "route": "/site/property-line",
+      "summary": "以「地界線」線型式的封閉模型線迴圈畫出基地地界線，並組成模型群組（地界線的替代做法）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_property_line",
+      "tsCoverage": "covered",
+      "notes": "需給 points 或 layer 其一。replace 預設 true，會先刪掉同名群組既有的線。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "minItems": 3,
+            "description": "頂點 [[x,y],...]（mm）",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 3
+            }
+          },
+          "cadLink": {
+            "type": "string",
+            "description": "CAD 連結／匯入名稱關鍵字（改從 CAD 圖層讀邊界）"
+          },
+          "layer": {
+            "type": "string",
+            "description": "存放邊界的 CAD 圖層名"
+          },
+          "name": {
+            "type": "string",
+            "default": "基地",
+            "description": "群組名稱與註解用的標籤"
+          },
+          "lineStyleName": {
+            "type": "string",
+            "default": "地界線",
+            "description": "線型式（Lines 的子品類）"
+          },
+          "colorRgb": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "新建線型式時的顏色 RGB"
+          },
+          "lineWeight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "新建線型式時的投影線寬"
+          },
+          "elevationMm": {
+            "type": "number",
+            "default": 0,
+            "description": "線的高程（mm）"
+          },
+          "group": {
+            "type": "boolean",
+            "default": true,
+            "description": "組成模型群組"
+          },
+          "replace": {
+            "type": "boolean",
+            "default": true,
+            "description": "先刪掉既有的同名地界線"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_link_cad",
+      "method": "POST",
+      "route": "/links/cad",
+      "summary": "連結 CAD（DWG）檔到指定樓層的平面視圖。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_link_cad",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "要連結的 DWG 完整路徑"
+          },
+          "level": {
+            "type": "string",
+            "description": "要連到哪個樓層的平面視圖"
+          },
+          "thisViewOnly": {
+            "type": "boolean",
+            "default": false,
+            "description": "僅此視圖可見"
+          },
+          "pin": {
+            "type": "boolean",
+            "default": true,
+            "description": "連結後鎖定（釘選）"
+          }
+        },
+        "required": [
+          "paths"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_mass_boxes",
+      "method": "POST",
+      "route": "/mass/boxes",
+      "summary": "在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_mass_boxes",
+      "tsCoverage": "covered",
+      "notes": "destructive 因為 replace 預設 true，會先刪掉同名的既有量體族。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "boxes": {
+            "type": "array",
+            "minItems": 1,
+            "description": "各量體",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "族名，每個 box 要唯一"
+                },
+                "comment": {
+                  "type": "string",
+                  "description": "註解"
+                },
+                "xMin": {
+                  "type": "number",
+                  "description": "矩形 min X（mm）"
+                },
+                "yMin": {
+                  "type": "number",
+                  "description": "矩形 min Y（mm）"
+                },
+                "xMax": {
+                  "type": "number",
+                  "description": "矩形 max X（mm）"
+                },
+                "yMax": {
+                  "type": "number",
+                  "description": "矩形 max Y（mm）"
+                },
+                "loop": {
+                  "type": "array",
+                  "description": "多邊形 [[x,y],...]（mm）；給了就覆寫矩形",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "zMin": {
+                  "type": "number",
+                  "description": "底部高程（mm）"
+                },
+                "zMax": {
+                  "type": "number",
+                  "description": "頂部高程（mm）"
+                },
+                "massFloors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "要在哪些樓層切量體樓板"
+                }
+              },
+              "required": [
+                "name",
+                "zMin",
+                "zMax"
+              ]
+            }
+          },
+          "levels": {
+            "type": "array",
+            "description": "順便建立／更新的樓層",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "樓層名稱"
+                },
+                "elevationMm": {
+                  "type": "number",
+                  "description": "標高（mm）"
+                }
+              },
+              "required": [
+                "name",
+                "elevationMm"
+              ]
+            }
+          },
+          "familyFolder": {
+            "type": "string",
+            "description": "暫存族檔的資料夾"
+          },
+          "replace": {
+            "type": "boolean",
+            "default": true,
+            "description": "同名量體族先刪再建"
+          }
+        },
+        "required": [
+          "boxes"
+        ]
+      }
+    },
+    {
+      "name": "revit_simplify_site",
+      "method": "POST",
+      "route": "/site/simplify",
+      "summary": "基地模精簡：DirectShape 共平面三角面合併＋Toposolid 格網減點。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_simplify_site",
+      "tsCoverage": "covered",
+      "notes": "apply=true 會重建幾何，原始三角面無法還原。每次呼叫都會寫進度到 %TEMP%\\mcp_site_simplify.log。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "applicationId": {
+            "type": "string",
+            "default": "RiR_site",
+            "description": "只處理這個 applicationId 的 DirectShape"
+          },
+          "angleDeg": {
+            "type": "number",
+            "default": 1,
+            "description": "共平面判定角度容差（度）"
+          },
+          "distMm": {
+            "type": "number",
+            "default": 5,
+            "description": "共平面判定距離容差（mm）"
+          },
+          "topoCellM": {
+            "type": "number",
+            "default": 45,
+            "description": "Toposolid 減點格網邊長（m）；<=0＝跳過地形"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 0,
+            "description": "最多處理幾個元素；0＝不限"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_site_directshapes",
+      "method": "POST",
+      "route": "/site/directshapes",
+      "summary": "查詢（或刪除）符合條件的 DirectShape 基地模元素。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_site_directshapes",
+      "tsCoverage": "covered",
+      "notes": "apply=false 時只查詢（唯讀）；apply=true 會刪除所有符合條件的 DirectShape。minX/minY/maxX/maxY 必須四個都給，否則整個範圍過濾被忽略 —— 少給一個會變成「全部刪」，很危險。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "applicationId": {
+            "type": "string",
+            "description": "依 applicationId 過濾（此路由無預設值）"
+          },
+          "dataIdPrefix": {
+            "type": "string",
+            "description": "依 DataId 前綴過濾"
+          },
+          "commentPrefix": {
+            "type": "string",
+            "description": "依註解前綴過濾"
+          },
+          "nameContains": {
+            "type": "string",
+            "description": "依名稱關鍵字過濾"
+          },
+          "minX": {
+            "type": "number",
+            "description": "範圍過濾 min X（mm）；四個都要給才生效"
+          },
+          "minY": {
+            "type": "number",
+            "description": "範圍過濾 min Y（mm）"
+          },
+          "maxX": {
+            "type": "number",
+            "description": "範圍過濾 max X（mm）"
+          },
+          "maxY": {
+            "type": "number",
+            "description": "範圍過濾 max Y（mm）"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 200,
+            "description": "最多回報／處理幾個"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝只查詢，true＝刪除符合的元素"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_draw_cad_lines",
+      "method": "POST",
+      "route": "/lines/draw",
+      "summary": "把外部轉出的 CAD 折線座標畫成 Revit 模型線，每條線加註解 CAD:{tag}|{style}。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_draw_cad_lines",
+      "tsCoverage": "covered",
+      "notes": "replace 預設 true：會刪掉所有註解以 CAD:{tag}| 開頭的既有 CurveElement。removeCadLinks 會刪除符合的 CADLinkType。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "elevationMm": {
+            "type": "number",
+            "default": 0,
+            "description": "模型線高程（mm）"
+          },
+          "tag": {
+            "type": "string",
+            "default": "cad",
+            "description": "註解標籤，用來辨識／取代這批線"
+          },
+          "replace": {
+            "type": "boolean",
+            "default": true,
+            "description": "先刪掉同 tag 的既有線"
+          },
+          "styles": {
+            "type": "array",
+            "description": "線型式定義（不存在就建立）",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "線型式名稱"
+                },
+                "rgb": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "description": "顏色；省略＝灰 128,128,128"
+                },
+                "weight": {
+                  "type": "integer",
+                  "description": "線寬；省略＝1"
+                },
+                "dash": {
+                  "type": "string",
+                  "description": "虛線樣式關鍵字，以 | 分隔，比對 LinePatternElement 名稱"
+                }
+              }
+            }
+          },
+          "curves": {
+            "type": "array",
+            "description": "要畫的折線",
+            "items": {
+              "type": "object",
+              "properties": {
+                "style": {
+                  "type": "string",
+                  "description": "用哪個線型式名稱"
+                },
+                "pts": {
+                  "type": "array",
+                  "minItems": 2,
+                  "description": "折線點 [[x,y],...]（mm）；少於 2 點會跳過",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "closed": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "是否閉合"
+                }
+              },
+              "required": [
+                "pts"
+              ]
+            }
+          },
+          "removeCadLinks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要一併刪除的 CADLinkType 名稱關鍵字"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_move_link",
+      "method": "POST",
+      "route": "/links/move",
+      "summary": "移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_move_link",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入。nameContains 若對不到「剛好一個」連結會丟錯（這是刻意的保護）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "nameContains": {
+            "type": "string",
+            "description": "連結名稱關鍵字，必須只對到一個連結"
+          },
+          "dxMm": {
+            "type": "number",
+            "default": 0,
+            "description": "位移 X（mm）"
+          },
+          "dyMm": {
+            "type": "number",
+            "default": 0,
+            "description": "位移 Y（mm）"
+          },
+          "dzMm": {
+            "type": "number",
+            "default": 0,
+            "description": "位移 Z（mm）"
+          },
+          "acquireCoordinates": {
+            "type": "boolean",
+            "default": false,
+            "description": "從連結取得共用座標"
+          },
+          "setElevationM": {
+            "type": "number",
+            "description": "設定專案基準點高程（m）"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_set_material_appearance",
+      "method": "POST",
+      "route": "/materials/appearance",
+      "summary": "為材質建立／更新「一般」彩現外觀（漫射色、透明度、光澤），Enscape 可見。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_material_appearance",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入；材質與外觀資產不存在時會建立（外觀資產命名為「<name>_外觀」）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "materials": {
+            "type": "array",
+            "description": "要設定的材質",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "材質名稱"
+                },
+                "rgb": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "description": "漫射色；省略＝200,200,200"
+                },
+                "transparency": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "default": 0,
+                  "description": "透明度（0–100）"
+                },
+                "glossiness": {
+                  "type": "number",
+                  "description": "光澤；省略＝不改"
+                }
+              }
+            }
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_set_site_materials",
+      "method": "POST",
+      "route": "/site/materials",
+      "summary": "依註解關鍵字規則批次指定基地模 DirectShape／地形的材質與顏色。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_site_materials",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名關鍵字；省略＝作用中文件"
+          },
+          "applicationId": {
+            "type": "string",
+            "default": "RiR_site",
+            "description": "只處理這個 applicationId 的 DirectShape"
+          },
+          "rules": {
+            "type": "array",
+            "description": "比對規則（依序套用）",
+            "items": {
+              "type": "object",
+              "properties": {
+                "contains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "註解要含的關鍵字（任一命中即套用）"
+                },
+                "material": {
+                  "type": "string",
+                  "description": "材質名稱"
+                },
+                "rgb": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "description": "顏色 RGB"
+                },
+                "transparency": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "default": 0,
+                  "description": "透明度（0–100）"
+                }
+              }
+            }
+          },
+          "topoMaterial": {
+            "type": "object",
+            "description": "地形（Toposolid）的材質設定，欄位同 rules 項目",
+            "properties": {
+              "contains": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "material": {
+                "type": "string"
+              },
+              "rgb": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "transparency": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_document_info",
+      "method": "GET",
+      "route": "/documents/info",
+      "summary": "回報一份已開啟文件的資訊：路徑、是否有未存變更、是否工作共用、Revit 連結（含是否載入）、專案基準點共用座標（TWD97 m、對正北角度）、以及所有已開啟文件清單。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_document_info",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "文件名或路徑關鍵字；省略＝作用中文件"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_list_design_options",
+      "method": "GET",
+      "route": "/design-options",
+      "summary": "列出設計選項集與其選項：id、名稱、哪個是主要、哪個是作用中，以及各選項（與主模型）各有多少模型元素。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_design_options",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "文件名或路徑關鍵字；省略＝作用中文件"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_select_elements",
+      "method": "POST",
+      "route": "/selection",
+      "summary": "在 Revit 視窗中依 id 選取元件（取代目前選取），可同時縮放到選取範圍。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_select_elements",
+      "tsCoverage": "covered",
+      "notes": "只改 UI 選取狀態，不改模型。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "maxItems": 5000,
+            "description": "要選取的元件 ElementId"
+          },
+          "zoom": {
+            "type": "boolean",
+            "default": false,
+            "description": "縮放到選取範圍"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_save_document",
+      "method": "POST",
+      "route": "/documents/save",
+      "summary": "就地存檔一份已開啟的文件（等同 Ctrl+S），不必是作用中文件。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_save_document",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply 開關，呼叫就存檔。2026-10-03 已修：TS 端 targetGuard 以前會在呼叫 handler 前把 document 剝掉，導致從 Claude Desktop 叫這支永遠只存作用中文件；現在 targetGuard 會偵測「工具自己宣告了 document」（ownDoc），該參數同時用來選 Revit 實例、並原樣轉交給 C# handler（DocumentOpsHandler.DocReq），所以 MCP 與面板行為一致。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "文件名或路徑關鍵字；省略＝作用中文件"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_delete_in_link",
+      "method": "POST",
+      "route": "/links/delete-elements",
+      "summary": "刪除「被連結的 Revit 檔」裡的元件，並把結果存回那個檔案。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_delete_in_link",
+      "tsCoverage": "covered",
+      "notes": "會開啟、修改並存檔別人的模型檔。呼叫前務必先問使用者。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "type": "string",
+            "description": "連結名稱關鍵字（要動哪個連結檔）"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要刪除的品類"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "要刪除的元件 ElementId（連結檔內的 id）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的刪除並存檔"
+          }
+        },
+        "required": [
+          "link"
+        ]
+      }
+    },
+    {
+      "name": "revit_activate_document",
+      "method": "POST",
+      "route": "/documents/activate",
+      "summary": "把一份已開啟的文件設為作用中，讓其他 revit_* 工具作用在它上面。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_activate_document",
+      "tsCoverage": "covered",
+      "notes": "只改作用中文件，不改模型內容。2026-10-03 已修：TS 端 targetGuard 以前會把 document 剝掉再呼叫，導致從 Claude Desktop 叫這支指定不到目標（handler 永遠收到 {}）；現在 targetGuard 偵測到工具自己宣告了 document（ownDoc）時，不覆寫原 schema（必填維持必填），該參數同時用來選 Revit 實例、並原樣轉交 handler。選實例時對 ownDoc 工具放寬為「該檔在那個 Revit 裡有開著」即可，不必是作用中檔案 —— 否則這支要指定的正好是「還不是作用中」的那個檔，會被擋死。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "已開啟文件的名稱或路徑關鍵字"
+          }
+        },
+        "required": [
+          "document"
+        ]
+      }
+    },
+    {
+      "name": "revit_clear_model",
+      "method": "POST",
+      "route": "/documents/clear-model",
+      "summary": "刪除文件裡的模型元件實例（牆、樓板、門、家具、房間、模型群組、基地、量體…），例如專案樣板內附的範例建築。視圖、圖紙、標高、軸網、註解與類型會保留。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_clear_model",
+      "tsCoverage": "covered",
+      "notes": "apply=true 會大量刪除模型元件。呼叫前務必先問使用者。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "文件名或路徑關鍵字；省略＝作用中文件"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只刪這些品類；省略＝預設的模型品類全集"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的刪除"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_link_revit",
+      "method": "POST",
+      "route": "/links/revit",
+      "summary": "把 .rvt 連結進文件（預設原點對原點，shared＝依共用座標），可同時取得其共用座標。",
+      "readOnly": false,
+      "destructive": false,
+      "alwaysWrites": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_link_revit",
+      "tsCoverage": "covered",
+      "notes": "沒有 apply 開關，呼叫就連結。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "目標文件名或路徑關鍵字；省略＝作用中文件"
+          },
+          "path": {
+            "type": "string",
+            "description": "要連結的 .rvt 完整路徑"
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "origin",
+              "shared"
+            ],
+            "default": "origin",
+            "description": "定位方式"
+          },
+          "acquireCoordinates": {
+            "type": "boolean",
+            "default": false,
+            "description": "從連結取得共用座標"
+          },
+          "closeIfOpen": {
+            "type": "boolean",
+            "default": false,
+            "description": "目標檔若已開啟則先關閉"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "revit_model_health",
+      "method": "GET",
+      "route": "/qc/health",
+      "summary": "作用中模型的健檢總覽（唯讀）：檔案大小、元素數、警告總數與前 15 類、可載入／內建族、匯入與連結 CAD、Revit 連結載入狀態、群組與未使用群組類型、未上圖紙的視圖與明細表、未使用視圖樣板、未放置／未封閉房間、設計選項、工作集、材料與填充樣式數、可清除元素數。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_model_health",
+      "tsCoverage": "covered",
+      "notes": "大模型可能跑很久（MCP 端逾時設 10 分鐘）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "purgeable": {
+            "type": "boolean",
+            "default": true,
+            "description": "是否一併分析可清除元素（關掉會快一些）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_performance_report",
+      "method": "POST",
+      "route": "/qc/performance",
+      "summary": "找出拖慢模型的主因（唯讀）：各品類實例數、各族的實例數×幾何量排序、單一類型最複雜的族、每個 CAD 的曲線／圖塊量、2D 雜物（詳圖線、模型線、填充區域、文字、尺寸、DirectShape、修訂雲形）、Fine 細緻度視圖數。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_performance_report",
+      "tsCoverage": "covered",
+      "notes": "唯讀但是 POST（參數太多塞不進查詢字串）。sampleGeometry 開著會很慢。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "topN": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 20,
+            "description": "各排行榜取前幾名"
+          },
+          "maxFamilies": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 400,
+            "description": "最多分析幾個族"
+          },
+          "sampleGeometry": {
+            "type": "boolean",
+            "default": true,
+            "description": "取樣幾何量（面數／三角形數）；關掉會快很多"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_list_warnings",
+      "method": "GET",
+      "route": "/warnings",
+      "summary": "列出作用中模型的警告（唯讀）：依描述分組的統計（含 autoFix 標記），以及逐筆明細（相關元件 id、品類、族、類型、樓層、是否在群組內）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_warnings",
+      "tsCoverage": "covered",
+      "notes": "不改模型，但 csvPath 非空時會對呼叫者指定的任意路徑寫檔（並建立資料夾）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "contains": {
+            "type": "string",
+            "description": "警告描述關鍵字"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "duplicate-instances",
+              "room-separation-on-wall",
+              "room-tag-outside"
+            ],
+            "description": "只看可自動修正的某一類"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000,
+            "default": 50,
+            "description": "明細筆數"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "分頁位移"
+          },
+          "csvPath": {
+            "type": "string",
+            "description": "一併匯出 CSV 的完整路徑（會覆寫既有檔）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_resolve_warnings",
+      "method": "POST",
+      "route": "/warnings/resolve",
+      "summary": "自動修正可安全處理的警告類型（依 Revit 內建警告 id 判斷，不受介面語言影響）。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_resolve_warnings",
+      "tsCoverage": "covered",
+      "notes": "apply=true 會刪除重複實例／房間分隔線等元件。建議先 apply=false 看清單。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "duplicate-instances",
+                "room-separation-on-wall",
+                "room-tag-outside"
+              ]
+            },
+            "description": "要處理哪幾類；省略＝全部可自動修正的類型"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的修正"
+          },
+          "maxFixes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 500,
+            "description": "一次最多修幾筆"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_purge_scan",
+      "method": "POST",
+      "route": "/purge/scan",
+      "summary": "列出沒有被放置的族（預設只看註解類品類）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_purge_scan",
+      "tsCoverage": "covered",
+      "notes": "唯讀但是 POST。回傳的族名清單可以直接餵給 revit_purge_delete。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "品類名稱（可帶或不帶 OST_ 前綴，也可用中文品類名）；給了就忽略 annotationOnly"
+          },
+          "annotationOnly": {
+            "type": "boolean",
+            "default": true,
+            "description": "只掃註解類品類（categories 為空時才生效）"
+          }
+        }
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_purge_delete",
+      "method": "POST",
+      "route": "/purge/delete",
+      "summary": "依名單刪除未被使用的族（仍在使用中的會自動跳過）。dryRun 預設 true 只回傳預覽清單。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_purge_delete",
+      "tsCoverage": "covered",
+      "notes": "dryRun 預設 true：不帶就只預覽、不動模型；要真刪必須明確傳 false。（2026-10-03 修正：先前 handler 完全忽略 dryRun、要求預覽仍會刪除。舊版 DLL 無此修正，以回應裡的 dryRun 欄位為準——它回報實際執行的模式。）預檢建議先呼叫 revit_purge_scan。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "要刪除的族名（建議取自 revit_purge_scan 的結果）"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true,
+            "description": "預設 true 只回傳 wouldDelete 預覽清單；要真正刪除必須明確傳 false"
+          }
+        },
+        "required": [
+          "names"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_list_tag_types",
+      "method": "GET",
+      "route": "/annotations/tagtypes",
+      "summary": "列出專案裡所有註解類（Annotation）的標籤族類型。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_tag_types",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "關鍵字，會同時比對品類名／族名／類型名"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_read_view_annotations",
+      "method": "GET",
+      "route": "/annotations/viewtags",
+      "summary": "讀出某張視圖現有的標籤、尺寸標註與文字，用來照抄既有圖面的標註慣例。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_read_view_annotations",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_tag_elements",
+      "method": "POST",
+      "route": "/annotations/tags",
+      "summary": "在視圖中放置標籤（例如廁所詳圖上的菱形設備編號標籤）。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_tag_elements",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "直接指定要標的元件"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要蒐集的品類：PlumbingFixtures / SpecialityEquipment / MechanicalEquipment / ElectricalFixtures / LightingFixtures / GenericModel / Casework / Furniture / Doors / Windows / Walls / Ceilings / Floors"
+          },
+          "tagFamilyName": {
+            "type": "string",
+            "description": "標籤族名"
+          },
+          "tagTypeName": {
+            "type": "string",
+            "description": "標籤類型名"
+          },
+          "offsetMm": {
+            "type": "number",
+            "default": 0,
+            "description": "相對元件中心的偏移（mm）"
+          },
+          "offsetDirection": {
+            "type": "string",
+            "enum": [
+              "none",
+              "up",
+              "down",
+              "left",
+              "right"
+            ],
+            "default": "none",
+            "description": "偏移方向"
+          },
+          "hasLeader": {
+            "type": "boolean",
+            "default": false,
+            "description": "帶引線"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ],
+            "default": "horizontal",
+            "description": "標籤方向"
+          },
+          "skipTagged": {
+            "type": "boolean",
+            "default": true,
+            "description": "跳過在此視圖已有標籤的元件"
+          },
+          "includeLinks": {
+            "type": "boolean",
+            "default": false,
+            "description": "一併蒐集已載入的 Revit 連結裡的元件"
+          },
+          "seedElementId": {
+            "type": "integer",
+            "description": "用這個元件（例如完成面背牆）覆寫自動偵測到的房間"
+          },
+          "maxDepthMm": {
+            "type": "number",
+            "default": 2000,
+            "description": "僅 seedElementId：seed 前方多遠內仍算同一間（mm）"
+          },
+          "roomSearchDepthMm": {
+            "type": "number",
+            "default": 8000,
+            "description": "自動偵測房間時往視圖內取樣多深（mm）"
+          },
+          "skipBlankMark": {
+            "type": "boolean",
+            "default": true,
+            "description": "跳過類型標記為空的元件"
+          },
+          "markInclude": {
+            "type": "string",
+            "description": "只標類型標記符合此正規式的元件"
+          },
+          "markExclude": {
+            "type": "string",
+            "description": "跳過類型標記符合此正規式的元件"
+          },
+          "dedupeByMark": {
+            "type": "boolean",
+            "default": false,
+            "description": "同一個標記只標一個（取最靠近背牆的）"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "onElement",
+              "sideLeaders"
+            ],
+            "default": "onElement",
+            "description": "標籤擺法：壓在元件上，或排到兩側加引線"
+          },
+          "leaderMarginMm": {
+            "type": "number",
+            "default": 500,
+            "description": "sideLeaders：標籤頭排在房間外多遠（mm）"
+          },
+          "leaderSpacingMm": {
+            "type": "number",
+            "default": 400,
+            "description": "sideLeaders：同側標籤頭的最小垂直間距（mm）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_delete_view_tags",
+      "method": "POST",
+      "route": "/annotations/deletetags",
+      "summary": "刪掉視圖裡的標籤（跑錯標註時的退路）。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_delete_view_tags",
+      "tsCoverage": "covered",
+      "notes": "tagIds 若有給，其餘過濾條件一律忽略。空 body 會丟錯，至少送 {}。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "指定要刪的標籤 ElementId；給了就忽略其他過濾條件"
+          },
+          "tagFamilyName": {
+            "type": "string",
+            "description": "只刪這個標籤族的"
+          },
+          "tagTypeName": {
+            "type": "string",
+            "description": "只刪這個標籤類型的"
+          },
+          "blankTextOnly": {
+            "type": "boolean",
+            "default": false,
+            "description": "只刪文字為空的標籤"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝真的刪除"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      },
+      "shapeAuthority": "manifest"
+    },
+    {
+      "name": "revit_create_dimension",
+      "method": "POST",
+      "route": "/annotations/dimensions",
+      "summary": "在視圖中建立一條跨多個元件的尺寸鏈。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_dimension",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 2,
+            "description": "要串起來的元件（至少 2 個）"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ],
+            "default": "horizontal",
+            "description": "尺寸鏈方向"
+          },
+          "offsetMm": {
+            "type": "number",
+            "default": 500,
+            "description": "尺寸線距元件的偏移（mm）"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ],
+            "default": "auto",
+            "description": "尺寸線放在哪一側"
+          },
+          "dimensionTypeName": {
+            "type": "string",
+            "description": "尺寸樣式名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewId",
+          "elementIds"
+        ]
+      }
+    }
+  ]
+}

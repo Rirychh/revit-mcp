@@ -1,0 +1,153 @@
+﻿<!DOCTYPE html>
+<!-- Revit MCP — © 2026 Rita (Rirychh) | https://github.com/Rirychh/revit-mcp -->
+<html>
+<head>
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<meta charset="utf-8">
+<title>Revit MCP 安裝</title>
+<hta:application id="app" border="thin" scroll="no" singleinstance="yes" contextmenu="no" maximizebutton="no" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height:100%; overflow:hidden; }
+  body { background:#F5F6F2; font-family:"Segoe UI","Microsoft JhengHei",sans-serif; height:100%; display:flex; align-items:center; justify-content:center; }
+  .card { width:500px; background:#FFF; border:1px solid #E7E8E2; border-radius:16px; padding:34px 38px 30px; box-shadow:0 30px 70px -50px rgba(30,58,25,.55); }
+  .top { display:flex; align-items:center; margin-bottom:22px; }
+  .logo { width:30px; height:30px; border-radius:7px; background:#35682D; color:#fff; font-weight:700; text-align:center; line-height:30px; margin-right:12px; font-size:14px; }
+  .brand { font-size:12px; color:#8B9184; }
+  h2 { font-size:24px; font-weight:600; color:#1B211C; margin-bottom:4px; }
+  .sub { font-size:12.5px; color:#8B9184; margin-bottom:22px; line-height:1.6; }
+  .lbl { display:block; font-size:10px; letter-spacing:.1em; color:#9AA091; margin-bottom:6px; font-family:Consolas,monospace; text-transform:uppercase; }
+  .hint { font-size:12px; color:#5E6458; margin-bottom:8px; line-height:1.55; }
+  .row { display:flex; margin-bottom:18px; }
+  .row input { flex:1; border:1.5px solid #E2E6DC; border-radius:8px; padding:8px 10px; font-family:Consolas,monospace; font-size:11px; color:#1B211C; background:#FAFBF8; }
+  .mini { border:1.5px solid #1B211C; background:#fff; border-radius:8px; padding:0 14px; margin-left:8px; font-size:12px; cursor:pointer; }
+  .mini:hover { background:#1B211C; color:#fff; }
+  textarea { width:100%; height:84px; border:1.5px solid #E2E6DC; border-radius:8px; padding:8px 10px; font-family:Consolas,monospace; font-size:11px; resize:none; margin-bottom:16px; }
+  textarea:focus, .row input:focus { outline:none; border-color:#35682D; }
+  .btn { width:100%; border:none; border-radius:10px; background:#1B211C; color:#fff; padding:13px; font-size:14px; font-weight:600; cursor:pointer; }
+  .btn:hover { background:#35682D; }
+  .links { display:flex; justify-content:space-between; margin-top:12px; font-size:12px; }
+  .links a { color:#5E6458; cursor:pointer; text-decoration:underline; }
+  .links a:hover { color:#35682D; }
+  #err { font-size:12px; color:#B03A2E; margin-top:12px; min-height:16px; line-height:1.5; }
+  .who { font-size:11px; color:#9AA091; margin-top:-12px; margin-bottom:18px; font-family:Consolas,monospace; }
+  .step { display:flex; align-items:center; padding:9px 0; }
+  .dot { width:24px; height:24px; border-radius:50%; text-align:center; line-height:21px; font-size:12px; margin-right:14px; border:1.5px solid #E2E6DC; color:#B4B9AC; }
+  .dot.on { background:#35682D; border-color:#35682D; color:#fff; }
+  .zh { font-size:13.5px; color:#B4B9AC; } .step.on .zh { color:#1B211C; }
+  .note { font-size:12px; color:#5E6458; margin-top:14px; line-height:1.6; }
+  .ok { font-size:40px; color:#35682D; margin-bottom:10px; }
+</style>
+<script language="javascript">
+var fso, shell, TEMP, pollTimer = null, n = 0, curMode = "install";
+var PROG = "";
+
+function boot() {
+  var s = (screen.deviceXDPI || 96) / 96;
+  if (s > 1) document.getElementsByTagName("div")[0].style.zoom = s;
+  window.resizeTo(Math.round(620 * s), Math.round(720 * s));
+  window.moveTo(Math.round((screen.availWidth - 620 * s) / 2), Math.round((screen.availHeight - 720 * s) / 2));
+  fso = new ActiveXObject("Scripting.FileSystemObject");
+  shell = new ActiveXObject("WScript.Shell");
+  TEMP = shell.ExpandEnvironmentStrings("%TEMP%");
+  PROG = TEMP + "\\revitmcp_progress.txt";
+  var dir = htaDir();
+  if (!fso.FileExists(dir + "\\install_revitmcp.ps1") || !fso.FolderExists(dir + "\\payload")) {
+    document.getElementById("err").innerText = "請先把整個 zip 解壓縮到資料夾，再從資料夾裡執行這個檔案。";
+    return;
+  }
+}
+
+function htaDir() {
+  var h = decodeURIComponent(window.location.href.replace(/^file:\/*/i, ""));
+  if (!/^[A-Za-z]:/.test(h)) h = "\\\\" + h;
+  return h.replace(/\//g, "\\").replace(/\\[^\\]*$/, "");
+}
+
+function psCmd(args) {
+  return 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + htaDir() + '\\install_revitmcp.ps1" ' + args;
+}
+
+function readUnicode(p) {
+  var ts = null, s = "";
+  try { if (!fso.FileExists(p)) return ""; ts = fso.OpenTextFile(p, 1, false, -1); if (!ts.AtEndOfStream) s = ts.ReadAll(); } catch (e) { s = ""; }
+  if (ts) { try { ts.Close(); } catch (e2) {} }
+  return s;
+}
+
+function show(id) {
+  var ids = ["pForm", "pRun", "pDone"];
+  for (var i = 0; i < ids.length; i++) document.getElementById(ids[i]).style.display = ids[i] == id ? "block" : "none";
+}
+function setStep(k) {
+  var d = document.getElementById("dot" + k);
+  if (d) { d.className = "dot on"; d.innerHTML = "&#10003;"; document.getElementById("st" + k).className = "step on"; }
+}
+function resetSteps() {
+  for (var k = 3; k <= 5; k++) { var d = document.getElementById("dot" + k); d.className = "dot"; d.innerHTML = k - 2; document.getElementById("st" + k).className = "step"; }
+}
+
+function start(mode) {
+  var err = document.getElementById("err"); err.style.color = "#B03A2E"; err.innerText = "";
+  if (mode == "uninstall" && !confirm("確定要移除 Revit MCP？")) return;
+  curMode = mode;
+  try { if (fso.FileExists(PROG)) fso.DeleteFile(PROG); } catch (e) {}
+  resetSteps();
+  document.getElementById("runTitle").innerText = mode == "uninstall" ? "移除中…" : "安裝中…";
+  show("pRun");
+  var log = TEMP + "\\revitmcp_install.log";
+  try { shell.Run('cmd /c ' + psCmd('-Mode ' + mode) + ' > "' + log + '" 2>&1', 0, false); }
+  catch (e) { show("pForm"); err.innerText = "無法啟動安裝程式：" + e.message; return; }
+  n = 0; pollTimer = window.setInterval(poll, 900);
+}
+
+function poll() {
+  n++;
+  var t = readUnicode(PROG);
+  for (var k = 3; k <= 5; k++) if (t.indexOf("STEP" + k + "|") > -1) setStep(k);
+  var d = t.match(/DONE\|([^\r\n]*)/);
+  if (d) { window.clearInterval(pollTimer); finish(d[1]); return; }
+  var m = t.match(/FAIL\|([^\r\n]*)/);
+  if (m) { window.clearInterval(pollTimer); show("pForm"); var e = document.getElementById("err"); e.style.color = "#B03A2E"; e.innerText = "未完成：" + m[1]; return; }
+  if (n > 300) { window.clearInterval(pollTimer); show("pForm"); document.getElementById("err").innerText = "逾時。詳細紀錄在 %TEMP%\\revitmcp_install.log"; }
+}
+
+function finish(info) {
+  var msg;
+  if (curMode == "uninstall") msg = "已移除。請重新開啟 Claude Desktop。";
+  else msg = "已安裝到 Revit " + info + "。<br>請重新開啟 Revit，並完全關閉後重開 Claude Desktop（含右下角系統匣圖示）。";
+  document.getElementById("doneMsg").innerHTML = msg;
+  show("pDone");
+}
+</script>
+</head>
+<body onload="boot()">
+  <div class="card">
+    <div class="top"><div class="logo">R</div><div class="brand">Revit MCP · © 2026 Rita (Rirychh)</div></div>
+
+    <div id="pForm">
+      <h2>Revit MCP 安裝</h2>
+      <div class="sub">讓 Claude Desktop 直接讀取與操作開著的 Revit 模型。支援 Revit 2022–2027。</div>
+
+      <button class="btn" onclick="start('install')">安裝 · Install →</button>
+      <div class="links"><a onclick="start('uninstall')">移除 Revit MCP</a></div>
+      <div id="err"></div>
+    </div>
+
+    <div id="pRun" style="display:none;">
+      <h2 id="runTitle">安裝中…</h2>
+      <div class="sub">請不要關閉這個視窗。</div>
+      <div id="st3" class="step"><div id="dot3" class="dot">1</div><div class="zh">Revit 外掛</div></div>
+      <div id="st4" class="step"><div id="dot4" class="dot">2</div><div class="zh">MCP 伺服器</div></div>
+      <div id="st5" class="step"><div id="dot5" class="dot">3</div><div class="zh">Claude Desktop 設定</div></div>
+    </div>
+
+    <div id="pDone" style="display:none;">
+      <div class="ok">&#10003;</div>
+      <h2>完成</h2>
+      <div id="doneMsg" class="note"></div>
+      <button class="btn" style="margin-top:24px;" onclick="window.close()">關閉</button>
+    </div>
+  </div>
+</body>
+</html>
