@@ -17,6 +17,43 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `addin/license-tool/` | 授權碼發行工具（ECDSA P-256 簽章，綁 Windows 帳號／電腦／到期日） |
 | `server/` | TypeScript MCP server，提供約 85 個 Revit 工具（查詢、建模、圖紙、匯出、模型 QC、Purge 等） |
 
+## 支援的 AI
+
+**Revit 內的對話面板**：上方「AI」選單切換 Claude／GPT／Gemini，各家 API 金鑰分開存在 Windows 認證管理員。「模型」欄可改模型 ID（預設 `claude-sonnet-5`、`gpt-5`、`gemini-2.5-pro`）。三家共用同一份 `tools-manifest.json`；Gemini 不支援的 JSON Schema 關鍵字會自動轉換。
+
+**外部 MCP 客戶端**（透過 `server/`）：
+
+| 客戶端 | 設定檔 |
+|---|---|
+| Claude Desktop | 安裝精靈自動寫入 `claude_desktop_config.json` |
+| Gemini CLI | `%USERPROFILE%\.gemini\settings.json` 的 `mcpServers` |
+| Codex CLI（GPT） | `%USERPROFILE%\.codex\config.toml` 的 `[mcp_servers.revit]` |
+
+Gemini CLI：
+
+```json
+{
+  "mcpServers": {
+    "revit": {
+      "command": "C:\\Users\\<you>\\AppData\\Local\\Rirychh\\RevitMCP\\node\\node.exe",
+      "args": ["C:\\Users\\<you>\\AppData\\Local\\Rirychh\\RevitMCP\\server\\dist\\index.js"],
+      "timeout": 600000
+    }
+  }
+}
+```
+
+Codex CLI：
+
+```toml
+[mcp_servers.revit]
+command = 'C:\Users\<you>\AppData\Local\Rirychh\RevitMCP\node\node.exe'
+args = ['C:\Users\<you>\AppData\Local\Rirychh\RevitMCP\server\dist\index.js']
+tool_timeout_sec = 600
+```
+
+ChatGPT 網頁版／桌面版只能連遠端 MCP server，不能連這個本機 stdio server。
+
 ## 編譯
 
 增益集（需 .NET 8 SDK；Revit 2027 需 .NET 10 SDK）：

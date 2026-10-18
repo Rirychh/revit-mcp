@@ -1,4 +1,4 @@
-// Revit MCP — © 2026 Rita (Rirychh)
+﻿// Revit MCP — © 2026 Rita (Rirychh)
 // https://github.com/Rirychh/revit-mcp
 // SPDX-License-Identifier: MIT
 
@@ -10,6 +10,7 @@ using System.Windows.Media;
 using Autodesk.Revit.UI;
 using RevitMcpAddin.Ai;
 using TextBox = System.Windows.Controls.TextBox;
+using ComboBox = System.Windows.Controls.ComboBox;
 
 namespace RevitMcpAddin.UI
 {
@@ -36,8 +37,12 @@ namespace RevitMcpAddin.UI
         private readonly TextBox _nameBox;
 
         private string _apiKey = "";
-        private AnthropicClient? _client;
+        private IChatClient? _client;
         private bool _busy;
+        private AiProvider _provider = AiProvider.Claude;
+        private readonly TextBlock _title;
+        private readonly ComboBox _providerBox;
+        private readonly TextBox _modelBox;
 
         // 由 App.OnIdling 注入
         public RevitApiExecutor? Executor { get; set; }
@@ -52,6 +57,8 @@ namespace RevitMcpAddin.UI
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             LoadName();
+            PanelSettings.Load();
+            _provider = PanelSettings.Provider;
             var header = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x5B, 0x4A, 0x8A)),
@@ -61,9 +68,9 @@ namespace RevitMcpAddin.UI
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var title = new TextBlock { Text = "Claude · Revit   © 2026 Rita (Rirychh)", Foreground = Brushes.White, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(title, 0);
-            headerGrid.Children.Add(title);
+            _title = new TextBlock { Text = TitleText(), Foreground = Brushes.White, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(_title, 0);
+            headerGrid.Children.Add(_title);
             _nameBox = new TextBox { Text = _userName, MinWidth = 70, Padding = new Thickness(5, 2, 5, 2), FontSize = 12, VerticalContentAlignment = VerticalAlignment.Center, ToolTip = "你的顯示名稱" };
             Grid.SetColumn(_nameBox, 1);
             headerGrid.Children.Add(_nameBox);
@@ -80,13 +87,40 @@ namespace RevitMcpAddin.UI
                 MinWidth = 44,
                 Margin = new Thickness(6, 0, 0, 0),
                 FontSize = 12,
-                ToolTip = "檢視或更換 Anthropic API 金鑰"
+                ToolTip = "檢視或更換目前 AI 的 API 金鑰"
             };
             keyToggle.Click += (s, e) => ToggleKeyRow();
             Grid.SetColumn(keyToggle, 3);
             headerGrid.Children.Add(keyToggle);
 
-            header.Child = headerGrid;
+            // 第二列：AI 供應商與模型
+            var provGrid = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+            provGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            provGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            provGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            provGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var provLabel = new TextBlock { Text = "AI", Foreground = Brushes.White, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+            Grid.SetColumn(provLabel, 0);
+            provGrid.Children.Add(provLabel);
+            _providerBox = new ComboBox { MinWidth = 80, FontSize = 12, ToolTip = "切換 AI 供應商（切換後重新開始對話）" };
+            foreach (var p in AiProviders.All) _providerBox.Items.Add(AiProviders.DisplayName(p));
+            _providerBox.SelectedIndex = Array.IndexOf(AiProviders.All, _provider);
+            _providerBox.SelectionChanged += (s, e) => SwitchProvider(AiProviders.All[Math.Max(0, _providerBox.SelectedIndex)]);
+            Grid.SetColumn(_providerBox, 1);
+            provGrid.Children.Add(_providerBox);
+            var modelLabel = new TextBlock { Text = "模型", Foreground = Brushes.White, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) };
+            Grid.SetColumn(modelLabel, 2);
+            provGrid.Children.Add(modelLabel);
+            _modelBox = new TextBox { Text = PanelSettings.GetModel(_provider), FontSize = 12, Padding = new Thickness(5, 2, 5, 2), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = "模型 ID，按 Enter 套用；清空後按 Enter 恢復預設" };
+            _modelBox.KeyDown += (s, e) => { if (e.Key == System.Windows.Input.Key.Enter) { ApplyModel(); e.Handled = true; } };
+            _modelBox.LostFocus += (s, e) => ApplyModel();
+            Grid.SetColumn(_modelBox, 3);
+            provGrid.Children.Add(_modelBox);
+
+            var headerStack = new StackPanel();
+            headerStack.Children.Add(headerGrid);
+            headerStack.Children.Add(provGrid);
+            header.Child = headerStack;
             Grid.SetRow(header, 0);
             root.Children.Add(header);
 
@@ -156,8 +190,45 @@ namespace RevitMcpAddin.UI
             Content = root;
 
             LoadKey();
-            AddMessage(_apiKey == "" ? "請先在上方貼上 Anthropic API 金鑰並按「存金鑰」，即可開始對話。"
+            AddMessage(_apiKey == "" ? $"請先在上方貼上{AiProviders.KeyLabel(_provider)}並按「存金鑰」，即可開始對話。"
                                     : "面板就緒。直接輸入指令，例如「列出所有樓層」。", false);
+        }
+
+        private string TitleText() => AiProviders.DisplayName(_provider) + " · Revit   © 2026 Rita (Rirychh)";
+
+        /// <summary>切換 AI 供應商：載入該家金鑰與模型，重新開始對話。</summary>
+        private void SwitchProvider(AiProvider p)
+        {
+            if (p == _provider) return;
+            if (_busy)
+            {
+                _providerBox.SelectedIndex = Array.IndexOf(AiProviders.All, _provider);
+                AddNote("回覆進行中，等這輪結束再切換。");
+                return;
+            }
+            _provider = p;
+            PanelSettings.Provider = p;
+            PanelSettings.Save();
+            _client = null;
+            _title.Text = TitleText();
+            _modelBox.Text = PanelSettings.GetModel(p);
+            LoadKey();
+            AddMessage(_apiKey == ""
+                ? $"已切換到 {AiProviders.DisplayName(p)}。請先貼上{AiProviders.KeyLabel(p)}並按「存金鑰」。"
+                : $"已切換到 {AiProviders.DisplayName(p)}（{PanelSettings.GetModel(p)}），對話重新開始。", false);
+        }
+
+        /// <summary>套用模型欄位：空白＝恢復預設。改動後下一則訊息起生效。</summary>
+        private void ApplyModel()
+        {
+            var before = PanelSettings.GetModel(_provider);
+            PanelSettings.SetModel(_provider, _modelBox.Text);
+            var after = PanelSettings.GetModel(_provider);
+            _modelBox.Text = after;
+            if (after == before) return;
+            PanelSettings.Save();
+            if (_client != null) _client.Model = after;
+            AddNote($"模型改為 {after}");
         }
 
         private void LoadName()
@@ -175,7 +246,7 @@ namespace RevitMcpAddin.UI
 
         private void LoadKey()
         {
-            try { _apiKey = KeyStore.Load(); } catch { _apiKey = ""; }
+            try { _apiKey = KeyStore.Load(_provider); } catch { _apiKey = ""; }
             UpdateKeyStatus();
             _keyRow.Visibility = _apiKey == "" ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -200,8 +271,8 @@ namespace RevitMcpAddin.UI
         private void UpdateKeyStatus()
         {
             _keyStatus.Text = _apiKey == ""
-                ? "尚未設定金鑰。貼上 Anthropic API 金鑰後按「存金鑰」。"
-                : $"目前金鑰：{Mask(_apiKey)}　存放於：{KeyStore.StorageLabel}　（貼上新金鑰可直接覆蓋）";
+                ? $"尚未設定金鑰。貼上{AiProviders.KeyLabel(_provider)}後按「存金鑰」。"
+                : $"{AiProviders.DisplayName(_provider)} 金鑰：{Mask(_apiKey)}　存放於：{KeyStore.StorageLabel(_provider)}　（貼上新金鑰可直接覆蓋）";
         }
 
         private static string Mask(string key)
@@ -219,7 +290,7 @@ namespace RevitMcpAddin.UI
                 return;
             }
 
-            try { KeyStore.Save(k); }
+            try { KeyStore.Save(_provider, k); }
             catch (Exception ex)
             {
                 _keyStatus.Text = "寫入失敗：" + ex.Message;
@@ -239,11 +310,11 @@ namespace RevitMcpAddin.UI
         private void ClearKey()
         {
             var ok = System.Windows.MessageBox.Show(
-                "確定要刪除已儲存的 API 金鑰嗎？", "Claude · Revit",
+                $"確定要刪除已儲存的{AiProviders.KeyLabel(_provider)}嗎？", TitleText(),
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (ok != MessageBoxResult.OK) return;
 
-            try { KeyStore.Delete(); } catch { }
+            try { KeyStore.Delete(_provider); } catch { }
             _apiKey = "";
             _client = null;
             _keyBox.Clear();
@@ -265,22 +336,19 @@ namespace RevitMcpAddin.UI
 
             if (_client == null)
             {
-                _client = new AnthropicClient(_apiKey, UiApp, Executor);
-                try
-                {
-                    var mf = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "revit-mcp-model.txt");
-                    if (File.Exists(mf)) { var m = File.ReadAllText(mf).Trim(); if (m != "") _client.Model = m; }
-                }
-                catch { }
+                _client = AiProviders.Create(_provider, _apiKey, UiApp, Executor);
+                _client.Model = PanelSettings.GetModel(_provider);
             }
 
-            Action<string> onText = t => Dispatcher.Invoke(() => AddMessage(t, false));
+            var client = _client;
+            var speaker = AiProviders.DisplayName(_provider);
+            Action<string> onText = t => Dispatcher.Invoke(() => AddMessage(t, false, speaker));
             Action<string> onNote = t => Dispatcher.Invoke(() => AddNote(t));
 
             try
             {
                 // 背景緒跑對話：工具執行會阻塞等 Revit 主緒，不能在 UI 緒跑（會死鎖）
-                await Task.Run(() => _client.SendAsync(text, onText, onNote));
+                await Task.Run(() => client.SendAsync(text, onText, onNote));
             }
             catch (Exception ex)
             {
@@ -301,7 +369,7 @@ namespace RevitMcpAddin.UI
             _scroll.ScrollToEnd();
         }
 
-        public void AddMessage(string text, bool isUser)
+        public void AddMessage(string text, bool isUser, string? speaker = null)
         {
             var bubble = new Border
             {
@@ -317,7 +385,7 @@ namespace RevitMcpAddin.UI
             var group = new StackPanel { HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left };
             group.Children.Add(new TextBlock
             {
-                Text = isUser ? _userName : "Claude",
+                Text = isUser ? _userName : (speaker ?? AiProviders.DisplayName(_provider)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x7C, 0x76, 0x90)),
                 FontSize = 10,
                 Margin = new Thickness(4, 2, 4, 0),

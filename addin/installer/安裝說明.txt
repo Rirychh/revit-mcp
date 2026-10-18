@@ -17,6 +17,37 @@
    - 完全關閉 Claude Desktop（右下角系統匣圖示也要結束）再重新開啟。
 4. 在 Claude Desktop 對話中說「列出 Revit 裡的樓層」測試。
 
+【Revit 裡的對話面板：Claude／GPT／Gemini】
+面板上方「AI」選單可切換 Claude、GPT、Gemini，各家金鑰分開存（Windows 認證管理員）。
+- Claude：Anthropic API 金鑰（console.anthropic.com）
+- GPT：OpenAI API 金鑰（platform.openai.com）
+- Gemini：Gemini API 金鑰（aistudio.google.com）
+「模型」欄可改模型 ID，按 Enter 套用；清空再按 Enter 恢復預設。切換 AI 會重新開始對話。
+
+【搭配 Gemini CLI 或 Codex CLI（GPT）】
+安裝程式只會自動設定 Claude Desktop。其他 AI 工具要手動加設定，路徑中的 <帳號> 換成自己的 Windows 帳號名稱。
+
+Gemini CLI：編輯 %USERPROFILE%\.gemini\settings.json，加入：
+  {
+    "mcpServers": {
+      "revit": {
+        "command": "C:\\Users\\<帳號>\\AppData\\Local\\Rirychh\\RevitMCP\\node\\node.exe",
+        "args": ["C:\\Users\\<帳號>\\AppData\\Local\\Rirychh\\RevitMCP\\server\\dist\\index.js"],
+        "timeout": 600000
+      }
+    }
+  }
+  檔案裡已有其他設定時，只把 "revit" 這段併進既有的 "mcpServers"。
+
+Codex CLI：編輯 %USERPROFILE%\.codex\config.toml，加入：
+  [mcp_servers.revit]
+  command = 'C:\Users\<帳號>\AppData\Local\Rirychh\RevitMCP\node\node.exe'
+  args = ['C:\Users\<帳號>\AppData\Local\Rirychh\RevitMCP\server\dist\index.js']
+  tool_timeout_sec = 600
+
+設定完重開 Gemini CLI／Codex，說「列出 Revit 裡的樓層」測試。
+ChatGPT 網頁版／桌面版只能接遠端伺服器，不能接這個本機版本。
+
 【常見問題】
 - 「Revit 還開著」：請完全關閉 Revit（工作管理員裡也不能有 Revit.exe）。
 - 「找不到 Claude Desktop 的設定資料夾」：先安裝 Claude Desktop 並開過一次。

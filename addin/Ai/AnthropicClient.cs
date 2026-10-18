@@ -1,4 +1,4 @@
-// Revit MCP — © 2026 Rita (Rirychh)
+﻿// Revit MCP — © 2026 Rita (Rirychh)
 // https://github.com/Rirychh/revit-mcp
 // SPDX-License-Identifier: MIT
 
@@ -14,16 +14,14 @@ namespace RevitMcpAddin.Ai
     /// Anthropic Messages API 客戶端 + tool-use 迴圈。
     /// 對話在背景緒進行；工具呼叫透過 RevitApiExecutor 排到 Revit 主緒執行。
     /// </summary>
-    public class AnthropicClient
+    public class AnthropicClient : IChatClient
     {
-        // 模型 ID（可用 ~/revit-mcp-model.txt 覆蓋，免重編）
-        public string Model = "claude-sonnet-5";
+        // 模型 ID（面板模型欄位可改；舊版 ~/revit-mcp-model.txt 仍有效）
+        public string Model { get; set; } = AiProviders.DefaultModel(AiProvider.Claude);
         public int MaxTokens = 4096;
 
         private const string Endpoint = "https://api.anthropic.com/v1/messages";
-        private const string SystemPrompt =
-            "你是嵌在 Autodesk Revit 裡的助理。使用者用中文或英文下指令，你透過提供的工具讀取與修改目前開啟的 Revit 模型。" +
-            "動作前先確認有開啟文件；破壞性操作（建立/修改/匯出）先簡述你要做什麼再執行。回覆用繁體中文。";
+        private const string SystemPrompt = AiProviders.SystemPrompt;
 
         private readonly string _apiKey;
         private readonly UIApplication _uiApp;
@@ -43,7 +41,7 @@ namespace RevitMcpAddin.Ai
         {
             _messages.Add(new JObject { ["role"] = "user", ["content"] = userText });
 
-            for (int turn = 0; turn < 12; turn++)
+            for (int turn = 0; turn < AiProviders.MaxToolTurns; turn++)
             {
                 var reqBody = new JObject
                 {
