@@ -431,6 +431,44 @@ namespace RevitMcpAddin
                 "/annotations/deletetags" when method == "POST" => new AnnotationHandler(doc).DeleteViewTags(body),
                 "/annotations/dimensions" when method == "POST" => new AnnotationHandler(doc).CreateDimension(body),
 
+                // ── 分析（唯讀）／MEP／建模／修改／載入族群（2026-11 參照 Demolinator 功能集移植）──
+                "/analysis/clashes"             when method == "POST" => new AnalysisHandler(uiApp, doc).Clashes(body),
+                "/analysis/material-quantities" when method == "POST" => new AnalysisHandler(uiApp, doc).MaterialQuantities(body),
+                "/analysis/rooms"               when method == "GET"  => new AnalysisHandler(uiApp, doc).RoomData(qs),
+                "/analysis/statistics"          when method == "GET"  => new AnalysisHandler(uiApp, doc).Statistics(),
+                "/selection"                    when method == "GET"  => new AnalysisHandler(uiApp, doc).Selection(),
+                "/mep/ducts"                    when method == "POST" => new MepHandler(doc).Ducts(body),
+                "/mep/pipes"                    when method == "POST" => new MepHandler(doc).Pipes(body),
+                "/mep/systems"                  when method == "POST" => new MepHandler(doc).CreateSystem(body),
+                "/grids"                        when method == "POST" => new ModelingHandler(doc).Grids(body),
+                "/structural-framing"           when method == "POST" => new ModelingHandler(doc).Framing(body),
+                "/rooms/create"                 when method == "POST" => new ModelingHandler(doc).Rooms(body),
+                "/rooms/separation"             when method == "POST" => new ModelingHandler(doc).RoomSeparation(body),
+                "/detail-lines"                 when method == "POST" => new ModelingHandler(doc).DetailLines(body),
+                "/schedules"                    when method == "POST" => new ModelingHandler(doc).Schedule(body),
+                "/elements/mirror"              when method == "POST" => new EditHandler(uiApp, doc).Mirror(body),
+                "/views/color-by-parameter"     when method == "POST" => new EditHandler(uiApp, doc).ColorByParameter(body),
+                "/views/clear-overrides"        when method == "POST" => new EditHandler(uiApp, doc).ClearOverrides(body),
+                "/families/load"                when method == "POST" => new FamilyLoadHandler(doc).Load(body),
+
+                // ── 標籤／尺寸排版、標號截圖、DWG 轉 BIM、明細表與批次參數、MEP 接頭
+                //    （2026-11 功能構想參考 MLabs Revit MCP 公開的工具清單，程式獨立實作）──
+                "/annotations/tags/inspect"           when method == "GET"  => new TagLayoutHandler(doc).Inspect(qs),
+                "/annotations/tags/adjust"            when method == "POST" => new TagLayoutHandler(doc).Adjust(body),
+                "/annotations/tags/arrange"           when method == "POST" => new TagLayoutHandler(doc).Arrange(body),
+                "/annotations/dimensions/wall-chains" when method == "POST" => new DimChainHandler(doc).WallChains(body),
+                "/annotations/dimensions/inspect"     when method == "GET"  => new DimChainHandler(doc).Inspect(qs),
+                "/annotations/dimensions/adjust"      when method == "POST" => new DimChainHandler(doc).Adjust(body),
+                "/views/labeled-snapshot"             when method == "POST" => new VisualLabelHandler(doc).Snapshot(body),
+                "/cad/extract"                        when method == "POST" => new CadBimHandler(doc).Extract(body),
+                "/cad/generate"                       when method == "POST" => new CadBimHandler(doc).Generate(body),
+                "/schedules/list"                     when method == "GET"  => new ScheduleParamHandler(doc).List(qs),
+                "/schedules/data"                     when method == "GET"  => new ScheduleParamHandler(doc).Data(qs),
+                "/parameters/batch"                   when method == "POST" => new ScheduleParamHandler(doc).Batch(body),
+                "/mep/connectors"                     when method == "GET"  => new MepConnectorHandler(doc).Inspect(qs),
+                "/mep/route"                          when method == "POST" => new MepConnectorHandler(doc).Route(body),
+                "/mep/audit"                          when method == "GET"  => new MepConnectorHandler(doc).Audit(qs),
+
                 _ => JsonConvert.SerializeObject(new { success = false, error = $"Unknown route: {method} {path}" })
             };
         }

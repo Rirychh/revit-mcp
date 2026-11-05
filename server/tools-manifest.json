@@ -3,8 +3,8 @@
   "title": "Revit MCP tool manifest — single source of truth",
   "authority": "RevitHttpServer.Route() in RevitHttpServer.cs is the authoritative capability list. Every arm of that routing table has exactly one entry in tools[]. If you add a route, add an entry here in the same commit.",
   "naming": "Tool names follow the TypeScript MCP server (revit-mcp/src/tools/*.ts), because those are the names the user already calls from Claude Desktop. Where a route had no TS tool, a new name was coined in the same revit_<verb>_<noun> style.",
-  "routeArmCount": 86,
-  "toolCount": 86,
+  "routeArmCount": 119,
+  "toolCount": 119,
   "consumers": {
     "panel": "RevitMcpAddin Ai/RevitTools.cs — the Claude chat panel inside the Revit window. Loads this file as an embedded resource and generates its Anthropic tool definitions from it. Calls RevitHttpServer.Route() directly (in-process, via RevitApiExecutor/ExternalEvent) — it never goes over HTTP, so no token is involved.",
     "mcp": "revit-mcp/src/index.ts — the Node MCP server for Claude Desktop. Goes over authenticated HTTP. NOT yet generated from this manifest; see tsCoverage on each entry."
@@ -4759,6 +4759,1954 @@
           "viewId",
           "elementIds"
         ]
+      }
+    },
+    {
+      "name": "revit_check_clashes",
+      "method": "POST",
+      "route": "/analysis/clashes",
+      "summary": "碰撞檢查（唯讀）：兩組品類之間的實體幾何硬碰撞，回報兩側元件與位置（mm）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_check_clashes",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "大模型可能跑很久（MCP 端逾時 10 分鐘）。連結模型不在範圍內。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "setA": {
+            "type": "array",
+            "description": "品類清單（OST_ 名稱、英文別名或品類顯示名）",
+            "items": {
+              "type": "string"
+            }
+          },
+          "setB": {
+            "type": "array",
+            "description": "第二組品類；省略＝setA 自己互查",
+            "items": {
+              "type": "string"
+            }
+          },
+          "levels": {
+            "type": "array",
+            "description": "只看這些樓層",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxClashes": {
+            "type": "integer",
+            "description": "最多回報幾組",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 200
+          },
+          "csvPath": {
+            "type": "string",
+            "description": "給完整路徑則寫出 CSV（UTF-8 BOM）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_material_quantities",
+      "method": "POST",
+      "route": "/analysis/material-quantities",
+      "summary": "材料數量（唯讀）：依材料彙總材料體積（m³）與面積（m²）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_material_quantities",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "不等於估驗數量（未扣搭接、損耗）。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "description": "只算這些品類",
+            "items": {
+              "type": "string"
+            }
+          },
+          "groupBy": {
+            "type": "string",
+            "description": "彙總方式",
+            "enum": [
+              "material",
+              "category-material"
+            ],
+            "default": "material"
+          },
+          "csvPath": {
+            "type": "string",
+            "description": "給完整路徑則寫出 CSV（UTF-8 BOM）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_export_room_data",
+      "method": "GET",
+      "route": "/analysis/rooms",
+      "summary": "房間資料（唯讀）：編號、名稱、樓層、面積、周長、體積、可選邊界座標。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_room_data",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "description": "只看這個樓層"
+          },
+          "includeBoundary": {
+            "type": "boolean",
+            "description": "是否附邊界座標",
+            "default": false
+          },
+          "csvPath": {
+            "type": "string",
+            "description": "給完整路徑則寫出 CSV（UTF-8 BOM）"
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_model_statistics",
+      "method": "GET",
+      "route": "/analysis/statistics",
+      "summary": "模型統計（唯讀）：各品類實例數、族群、類型、圖紙、樓層、房間、警告、視圖數。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_model_statistics",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_get_selection",
+      "method": "GET",
+      "route": "/selection",
+      "summary": "讀取使用者目前在 Revit 中選取的元件（唯讀）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_get_selection",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revit_create_ducts",
+      "method": "POST",
+      "route": "/mep/ducts",
+      "summary": "建立風管（兩點一段，可多段）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_ducts",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "不會自動產生接頭。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "segments": {
+            "type": "array",
+            "description": "[{start,end}]",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "ductType": {
+            "type": "string",
+            "description": "風管類型"
+          },
+          "systemType": {
+            "type": "string",
+            "description": "風管系統類型"
+          },
+          "level": {
+            "type": "string",
+            "description": "參考樓層"
+          },
+          "widthMm": {
+            "type": "number",
+            "description": "矩形寬"
+          },
+          "heightMm": {
+            "type": "number",
+            "description": "矩形高"
+          },
+          "diameterMm": {
+            "type": "number",
+            "description": "圓形直徑"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "segments"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_pipes",
+      "method": "POST",
+      "route": "/mep/pipes",
+      "summary": "建立水管（兩點一段，可多段）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_pipes",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "不會自動產生管件。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "segments": {
+            "type": "array",
+            "description": "[{start,end}]",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "pipeType": {
+            "type": "string",
+            "description": "水管類型"
+          },
+          "systemType": {
+            "type": "string",
+            "description": "管路系統類型"
+          },
+          "level": {
+            "type": "string",
+            "description": "參考樓層"
+          },
+          "diameterMm": {
+            "type": "number",
+            "description": "管徑"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "segments"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_mep_system",
+      "method": "POST",
+      "route": "/mep/systems",
+      "summary": "把設備／末端的空接頭組成風管或管路系統。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_mep_system",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "duct 或 pipe",
+            "enum": [
+              "duct",
+              "pipe"
+            ],
+            "default": "duct"
+          },
+          "elementIds": {
+            "type": "array",
+            "description": "設備／末端元件 id",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "systemType": {
+            "type": "string",
+            "description": "系統類型"
+          },
+          "name": {
+            "type": "string",
+            "description": "系統名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_grids",
+      "method": "POST",
+      "route": "/grids",
+      "summary": "建立網格線。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_grids",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "grids": {
+            "type": "array",
+            "description": "[{name?,start,end}]",
+            "minItems": 1,
+            "maxItems": 300,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            }
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "grids"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_structural_framing",
+      "method": "POST",
+      "route": "/structural-framing",
+      "summary": "建立結構梁。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_structural_framing",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "beams": {
+            "type": "array",
+            "description": "[{start,end,level?}]",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y, z] mm；缺 z 時為 0",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                },
+                "level": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            }
+          },
+          "familyType": {
+            "type": "string",
+            "description": "「族群: 類型」或類型名"
+          },
+          "level": {
+            "type": "string",
+            "description": "預設參考樓層"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "beams"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_rooms",
+      "method": "POST",
+      "route": "/rooms/create",
+      "summary": "在點位建立房間。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_rooms",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rooms": {
+            "type": "array",
+            "description": "[{level?,point,name?,number?}]",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "type": "string"
+                },
+                "point": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "name": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "point"
+              ]
+            }
+          },
+          "level": {
+            "type": "string",
+            "description": "預設樓層"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "rooms"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_room_separation",
+      "method": "POST",
+      "route": "/rooms/separation",
+      "summary": "建立房間分隔線。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_room_separation",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "description": "[{start,end}]",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          },
+          "viewId": {
+            "type": "integer",
+            "description": "平面視圖 id"
+          },
+          "level": {
+            "type": "string",
+            "description": "樓層名"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_detail_lines",
+      "method": "POST",
+      "route": "/detail-lines",
+      "summary": "在視圖畫詳圖線。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_detail_lines",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id"
+          },
+          "lines": {
+            "type": "array",
+            "description": "[{start,end}]",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "end": {
+                  "type": "array",
+                  "description": "[x, y] mm",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 2000
+          },
+          "lineStyle": {
+            "type": "string",
+            "description": "線型名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "viewId",
+          "lines"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_schedule",
+      "method": "POST",
+      "route": "/schedules",
+      "summary": "建立明細表並加入欄位。apply=false 預檢並列出可用欄位。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_schedule",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "預檢會開一個一定回滾的交易讀取可用欄位。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "品類",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "明細表名稱",
+            "minLength": 1
+          },
+          "fields": {
+            "type": "array",
+            "description": "欄位顯示名",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "category",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "revit_mirror_elements",
+      "method": "POST",
+      "route": "/elements/mirror",
+      "summary": "鏡射元件（預設保留原件）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_mirror_elements",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "description": "元件 id",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "axis": {
+            "type": "string",
+            "description": "x 或 y",
+            "enum": [
+              "x",
+              "y"
+            ],
+            "default": "y"
+          },
+          "origin": {
+            "type": "array",
+            "description": "[x, y] mm",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "plane": {
+            "type": "object",
+            "description": "鏡射面",
+            "properties": {
+              "origin": {
+                "type": "array",
+                "description": "[x, y, z] mm；缺 z 時為 0",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 3
+              },
+              "normal": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              }
+            },
+            "required": [
+              "origin",
+              "normal"
+            ]
+          },
+          "copy": {
+            "type": "boolean",
+            "description": "保留原件",
+            "default": true
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      }
+    },
+    {
+      "name": "revit_color_by_parameter",
+      "method": "POST",
+      "route": "/views/color-by-parameter",
+      "summary": "依參數值在視圖中上色（元件覆寫）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_color_by_parameter",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id；省略＝作用中視圖"
+          },
+          "category": {
+            "type": "string",
+            "description": "品類",
+            "minLength": 1
+          },
+          "parameter": {
+            "type": "string",
+            "description": "參數名稱",
+            "minLength": 1
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": [
+          "category",
+          "parameter"
+        ]
+      }
+    },
+    {
+      "name": "revit_clear_view_overrides",
+      "method": "POST",
+      "route": "/views/clear-overrides",
+      "summary": "清除視圖中元件的圖形覆寫。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_clear_view_overrides",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "ids 與 category 都省略會清掉視圖中所有元件覆寫，包括手動設定的。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id；省略＝作用中視圖"
+          },
+          "ids": {
+            "type": "array",
+            "description": "只清這些元件",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "category": {
+            "type": "string",
+            "description": "只清這個品類"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_load_families",
+      "method": "POST",
+      "route": "/families/load",
+      "summary": "從 .rfa 載入族群。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_load_families",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "ported from Demolinator/revit-mcp-server (MIT) feature set; reimplemented in C#",
+      "notes": "overwrite=true 會覆蓋既有族群的類型參數值。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "description": ".rfa 完整路徑",
+            "items": {
+              "type": "string"
+            }
+          },
+          "folder": {
+            "type": "string",
+            "description": "資料夾路徑"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "覆蓋同名族群",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "revit_inspect_tags",
+      "method": "GET",
+      "route": "/annotations/tags/inspect",
+      "summary": "列出視圖中所有標籤的位置、被標元件、引線與轉折點，並找出互相重疊、壓在元件上、跑出裁剪框的標籤。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_inspect_tags",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多回傳幾個標籤",
+            "default": 300
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_adjust_tags",
+      "method": "POST",
+      "route": "/annotations/tags/adjust",
+      "summary": "逐一移動標籤頭（絕對位置或位移）、讓引線水平對齊被標元件、設定直角或直線引線轉折。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_adjust_tags",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tagId": {
+                  "type": "integer",
+                  "description": "標籤 ElementId"
+                },
+                "headUv": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "視圖平面座標 [u, v]（mm）：u＝視圖右方、v＝視圖上方，與 revit_inspect_tags 回傳的座標同一套",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "deltaMm": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "位移 [du, dv]（mm）",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "alignToAnchor": {
+                  "type": "string",
+                  "enum": [
+                    "horizontal",
+                    "vertical"
+                  ],
+                  "description": "horizontal＝標籤頭與被標元件中心同高；vertical＝同一條垂直線"
+                },
+                "hasLeader": {
+                  "type": "boolean",
+                  "description": "是否帶引線"
+                },
+                "elbow": {
+                  "type": "string",
+                  "enum": [
+                    "keep",
+                    "orthogonal",
+                    "straight"
+                  ],
+                  "description": "引線轉折",
+                  "default": "keep"
+                },
+                "orientation": {
+                  "type": "string",
+                  "enum": [
+                    "horizontal",
+                    "vertical"
+                  ],
+                  "description": "標籤方向"
+                }
+              },
+              "required": [
+                "tagId"
+              ]
+            },
+            "description": "要調整的標籤",
+            "minItems": 1,
+            "maxItems": 1000
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "moves"
+        ]
+      }
+    },
+    {
+      "name": "revit_arrange_tags",
+      "method": "POST",
+      "route": "/annotations/tags/arrange",
+      "summary": "把標籤頭整齊排到邊界外側（裁剪框、指定元件或矩形），依位置排序、保持間距，引線改成直角或直線。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_arrange_tags",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "只排這些標籤（省略＝視圖中所有讀得到被標元件的標籤）"
+          },
+          "boundary": {
+            "type": [
+              "string",
+              "integer",
+              "array"
+            ],
+            "description": "\"crop\"｜\"tagged\"｜元件 id｜[u0,v0,u1,v1]（mm）"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "left",
+              "right",
+              "top",
+              "bottom"
+            ],
+            "description": "排在哪一側",
+            "default": "auto"
+          },
+          "marginMm": {
+            "type": "number",
+            "description": "標籤頭距邊界（mm）",
+            "default": 500
+          },
+          "spacingMm": {
+            "type": "number",
+            "description": "同側最小間距（mm）",
+            "default": 400
+          },
+          "elbow": {
+            "type": "string",
+            "enum": [
+              "orthogonal",
+              "straight"
+            ],
+            "description": "引線轉折",
+            "default": "orthogonal"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_wall_dimension_chains",
+      "method": "POST",
+      "route": "/annotations/dimensions/wall-chains",
+      "summary": "在平面視圖自動建立牆的連續尺寸線（牆兩側面或單側面，可含軸線），水平、垂直或兩向。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_wall_dimension_chains",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "平面視圖 ElementId"
+          },
+          "wallIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "只標這些牆（省略＝視圖中所有直牆）"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical",
+              "both"
+            ],
+            "description": "量測方向",
+            "default": "both"
+          },
+          "faces": {
+            "type": "string",
+            "enum": [
+              "both",
+              "exterior",
+              "interior"
+            ],
+            "description": "參考牆的哪一側面",
+            "default": "both"
+          },
+          "includeGrids": {
+            "type": "boolean",
+            "description": "一併串上軸線",
+            "default": false
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ],
+            "description": "尺寸線放哪一側（auto：水平向放上方、垂直向放右方）",
+            "default": "auto"
+          },
+          "offsetMm": {
+            "type": "number",
+            "description": "尺寸線距最外側牆端（mm）",
+            "default": 1000
+          },
+          "dimensionTypeName": {
+            "type": "string",
+            "description": "線性尺寸類型名稱（省略用預設）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_inspect_dimensions",
+      "method": "GET",
+      "route": "/annotations/dimensions/inspect",
+      "summary": "列出視圖中的線性尺寸：各段長度、過短段落、尺寸線位置，並找出平行且靠太近（< 300 mm）的尺寸線。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_inspect_dimensions",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "minSegmentMm": {
+            "type": "number",
+            "description": "小於這個長度的段落算過短（mm）",
+            "default": 100
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_adjust_dimensions",
+      "method": "POST",
+      "route": "/annotations/dimensions/adjust",
+      "summary": "移動尺寸線（垂直於尺寸線平移，或 uv 位移）、刪除重複的尺寸。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_adjust_dimensions",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dimensionId": {
+                  "type": "integer",
+                  "description": "尺寸 ElementId"
+                },
+                "offsetMm": {
+                  "type": "number",
+                  "description": "垂直於尺寸線平移（mm）"
+                },
+                "deltaMm": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "[du, dv] 位移（mm）",
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "dimensionId"
+              ]
+            },
+            "description": "要移動的尺寸"
+          },
+          "deleteIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "要刪除的尺寸 id"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_labeled_snapshot",
+      "method": "POST",
+      "route": "/views/labeled-snapshot",
+      "summary": "暫時在元件上標數字（可隔離）後輸出視圖圖片，再整批回滾；回傳圖檔與「數字→元件 id」對照，讓 AI 看圖定位。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_labeled_snapshot",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 ElementId"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "只標這些元件"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只標這些品類（例如 Doors、Walls、PlumbingFixtures）"
+          },
+          "maxLabels": {
+            "type": "integer",
+            "description": "最多標幾個（上限 300）",
+            "default": 80
+          },
+          "isolate": {
+            "type": "boolean",
+            "description": "只顯示被標的元件",
+            "default": false
+          },
+          "labelBy": {
+            "type": "string",
+            "enum": [
+              "index",
+              "id"
+            ],
+            "description": "標數字或元件 id",
+            "default": "index"
+          },
+          "pixelSize": {
+            "type": "integer",
+            "description": "圖片長邊像素",
+            "default": 2048
+          },
+          "cropToElements": {
+            "type": "boolean",
+            "description": "暫時把裁剪框縮到被標元件範圍（截圖較清楚，同樣會回滾）",
+            "default": true
+          },
+          "cropMarginMm": {
+            "type": "number",
+            "description": "裁剪框外擴（mm）",
+            "default": 1500
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_cad_extract",
+      "method": "POST",
+      "route": "/cad/extract",
+      "summary": "萃取視圖中 DWG 的線段、封閉迴圈（含首尾相接的線段串成的迴圈）、圓，存成工作階段快取，回傳各圖層統計與 cacheId。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_cad_extract",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "放有 DWG 的平面視圖"
+          },
+          "cadName": {
+            "type": "string",
+            "description": "DWG 名稱關鍵字（視圖裡有多個 DWG 時）"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只萃取這些圖層（名稱關鍵字）"
+          },
+          "regionMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[minX,minY,maxX,maxY]（模型座標 mm）",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "chainLines": {
+            "type": "boolean",
+            "description": "把首尾相接的線段串成封閉迴圈",
+            "default": true
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_cad_generate_bim",
+      "method": "POST",
+      "route": "/cad/generate",
+      "summary": "依 revit_cad_extract 的快取產生柱（矩形／圓形迴圈，含旋轉角）或樓板（封閉迴圈）。apply=false 預檢列出尺寸分組與可用類型。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_cad_generate_bim",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cacheId": {
+            "type": "string",
+            "description": "revit_cad_extract 回傳的 cacheId"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "columns",
+              "floors"
+            ],
+            "description": "要產生的元件"
+          },
+          "layer": {
+            "type": "string",
+            "description": "圖層名稱或關鍵字"
+          },
+          "familyType": {
+            "type": "string",
+            "description": "「族群: 類型」：柱類型或樓板類型"
+          },
+          "level": {
+            "type": "string",
+            "description": "樓層名稱（省略＝萃取時視圖的樓層）"
+          },
+          "onlySize": {
+            "type": "string",
+            "description": "柱：只放這個尺寸，例如 \"600x600\"、\"500x800\"（短邊在前）或 \"Ø600\"；尺寸清單看預檢的 allSizesOnLayer"
+          },
+          "topOffsetMm": {
+            "type": "number",
+            "description": "柱：頂部約束設為同樓層並偏移這個高度（mm）"
+          },
+          "minSizeMm": {
+            "type": "number",
+            "description": "柱：最小邊長（mm）",
+            "default": 100
+          },
+          "maxSizeMm": {
+            "type": "number",
+            "description": "柱：最大邊長（mm）",
+            "default": 3000
+          },
+          "minAreaM2": {
+            "type": "number",
+            "description": "樓板：最小面積（m²）",
+            "default": 1
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "cacheId",
+          "mode",
+          "layer"
+        ]
+      }
+    },
+    {
+      "name": "revit_list_schedules",
+      "method": "GET",
+      "route": "/schedules/list",
+      "summary": "列出模型中的明細表（id、名稱、品類、欄位數）。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_list_schedules",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "nameContains": {
+            "type": "string",
+            "description": "名稱關鍵字"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_get_schedule_data",
+      "method": "GET",
+      "route": "/schedules/data",
+      "summary": "讀取明細表內容（表頭與本體，可分頁），照明細表畫面原樣呈現。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_get_schedule_data",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scheduleId": {
+            "type": "integer",
+            "description": "明細表 ElementId"
+          },
+          "name": {
+            "type": "string",
+            "description": "明細表名稱（完全相同優先，否則包含）"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "從第幾列開始",
+            "default": 0
+          },
+          "maxRows": {
+            "type": "integer",
+            "description": "最多幾列（上限 2000）",
+            "default": 300
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_batch_set_parameters",
+      "method": "POST",
+      "route": "/parameters/batch",
+      "summary": "批次設定多個元件的參數，全有或全無：任何一筆無法設定就整批不執行；類型參數預設保護。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_batch_set_parameters",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "type": "integer",
+                  "description": "元件 id"
+                },
+                "parameter": {
+                  "type": "string",
+                  "description": "參數名稱"
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "number",
+                    "integer",
+                    "boolean"
+                  ],
+                  "description": "新值"
+                }
+              },
+              "required": [
+                "elementId",
+                "parameter",
+                "value"
+              ]
+            },
+            "description": "要設定的參數",
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "allowTypeParameters": {
+            "type": "boolean",
+            "description": "允許修改類型參數",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "updates"
+        ]
+      }
+    },
+    {
+      "name": "revit_inspect_mep_connectors",
+      "method": "GET",
+      "route": "/mep/connectors",
+      "summary": "列出 MEP 元件（設備、末端、管線）的接頭：位置、方向、尺寸、領域、是否已接、接到哪些元件、所屬系統。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_inspect_mep_connectors",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id",
+            "minItems": 1,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_route_mep_connectors",
+      "method": "POST",
+      "route": "/mep/route",
+      "summary": "在兩個空接頭之間自動接水管或風管：直線或直角繞行（先沿接頭方向伸出 clearanceMm），轉角自動放彎頭。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_route_mep_connectors",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "object",
+            "properties": {
+              "elementId": {
+                "type": "integer"
+              },
+              "connectorId": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "elementId"
+            ],
+            "description": "起點元件與接頭"
+          },
+          "to": {
+            "type": "object",
+            "properties": {
+              "elementId": {
+                "type": "integer"
+              },
+              "connectorId": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "elementId"
+            ],
+            "description": "終點元件與接頭"
+          },
+          "path": {
+            "type": "string",
+            "enum": [
+              "orthogonal",
+              "direct"
+            ],
+            "description": "路徑",
+            "default": "orthogonal"
+          },
+          "clearanceMm": {
+            "type": "number",
+            "description": "沿接頭方向先伸出的長度（mm）",
+            "default": 300
+          },
+          "pipeType": {
+            "type": "string",
+            "description": "水管類型"
+          },
+          "ductType": {
+            "type": "string",
+            "description": "風管類型"
+          },
+          "systemType": {
+            "type": "string",
+            "description": "中間段使用的系統類型（省略沿用接頭的系統）"
+          },
+          "level": {
+            "type": "string",
+            "description": "參考樓層"
+          },
+          "diameterMm": {
+            "type": "number",
+            "description": "管徑／圓形風管直徑"
+          },
+          "widthMm": {
+            "type": "number",
+            "description": "矩形風管寬"
+          },
+          "heightMm": {
+            "type": "number",
+            "description": "矩形風管高"
+          },
+          "fittings": {
+            "type": "boolean",
+            "description": "轉角放彎頭",
+            "default": true
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "revit_audit_mep",
+      "method": "GET",
+      "route": "/mep/audit",
+      "summary": "全模型 MEP 稽核：沒接上的管端（依品類統計）、設備接頭沒有系統。",
+      "readOnly": true,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_audit_mep",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "feature ideas from the public tool list of MLabs Revit MCP (mlabsolution.com/revit-mcp); independently implemented in C#, no code copied",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "每類最多列幾筆樣本",
+            "default": 200
+          }
+        },
+        "required": []
       }
     }
   ]
