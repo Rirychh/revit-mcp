@@ -49,7 +49,7 @@ namespace RevitMcpAddin.Handlers
 
         /// <summary>
         /// 圖紙號碼。先讀 ViewSheet.SheetNumber；本案那個參數是空的，
-        /// 真正的圖號寫在工作集名稱裡（視圖 "圖紙: A9-17 - 廁所AB2詳圖"），所以再從那裡撈。
+        /// 真正的圖號寫在工作集名稱裡（視圖 "圖紙: A1-01 - 範例詳圖"），所以再從那裡撈。
         /// </summary>
         private static string GetSheetNumber(View v)
         {

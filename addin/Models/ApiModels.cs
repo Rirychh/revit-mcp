@@ -111,7 +111,7 @@ namespace RevitMcpAddin.Models
         [JsonProperty("scale")]     public int    Scale     { get; set; }
         /// <summary>
         /// 圖紙號碼。本案的「圖紙號碼」參數是空的，真正的圖號寫在工作集名稱裡
-        /// （視圖 "圖紙: A9-17 - 廁所AB2詳圖"），所以兩邊都找。
+        /// （視圖 "圖紙: A1-01 - 範例詳圖"），所以兩邊都找。
         /// </summary>
         [JsonProperty("sheetNumber")] public string SheetNumber { get; set; } = "";
     }

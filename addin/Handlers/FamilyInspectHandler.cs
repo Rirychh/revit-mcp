@@ -24,7 +24,7 @@ namespace RevitMcpAddin.Handlers
         private static object V(XYZ p) => p == null ? null : (object)new { x = Math.Round(p.X * F, 2), y = Math.Round(p.Y * F, 2), z = Math.Round(p.Z * F, 2) };
         private static object D(XYZ p) => p == null ? null : (object)new { x = Math.Round(p.X, 4), y = Math.Round(p.Y, 4), z = Math.Round(p.Z, 4) };
 
-        // POST /families/inspect  { "name":"BAF_衛生紙架" }
+        // POST /families/inspect  { "name":"範例_衛生紙架" }
         public string Inspect(string body)
         {
             var r = string.IsNullOrWhiteSpace(body) ? new JObject() : JObject.Parse(body);

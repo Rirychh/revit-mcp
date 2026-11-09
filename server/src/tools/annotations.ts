@@ -58,7 +58,7 @@ Args:
       description: `List the tags, dimensions and text notes that already exist in one view.
 
 Use this to copy an existing sheet's annotation convention instead of guessing it: point it at a
-finished view (e.g. one of the A9-13 toilet elevations) and it reports, for every tag, the family
+finished view (e.g. a finished toilet detail elevation) and it reports, for every tag, the family
 and type actually used, the tag text, whether it has a leader, and which element it tags — plus
 the dimension style names with their segment lengths, and the text-note styles.
 
@@ -143,10 +143,10 @@ Diamond vs rectangle is decided by the MARK FORMAT, not by category — a mirror
 gets the diamond while the finish wall beside it carries W3-11 and gets the rectangle. So route with
 markInclude / markExclude on the material pattern ^[A-Za-z]+\\d+-\\d+$ rather than by picking categories.
 
-House convention on this project, read off the A9-13 sheet:
-  - equipment: BAF_TG_Multi Category Tag_diamond : 編號-type mark, markExclude the material pattern,
+Example house convention (from one project's toilet detail sheets):
+  - equipment: Example_Multi Category Tag_diamond : 編號-type mark, markExclude the material pattern,
     layout "sideLeaders"
-  - materials: BAF_TG_Multi Category Tag : S50-100, markInclude the material pattern,
+  - materials: Example_Multi Category Tag : S50-100, markInclude the material pattern,
     dedupeByMark true (one W, one F, one C per view), layout "onElement"
 
 layout "onElement" puts the tag at the element's centre. layout "sideLeaders" splits the targets at

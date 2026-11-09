@@ -178,7 +178,7 @@ namespace RevitMcpAddin.Handlers
         {
             var r = Parse(body);
             bool apply = (bool?)r["apply"] ?? false;
-            var tt = FindTextType((string?)r["textTypeName"] ?? "BAF 3mm 內文");
+            var tt = FindTextType((string?)r["textTypeName"]);
             if (tt == null) return Fail("找不到文字類型。");
 
             var cfg = new Dictionary<string, (double x, double y, double dy, int chars, int maxLines)>
@@ -272,7 +272,7 @@ namespace RevitMcpAddin.Handlers
             bool apply = (bool?)r["apply"] ?? false;
             long revId = (long?)r["revisionId"] ?? 0;
             if (_doc.GetElement(new ElementId((int)revId)) is not Revision rev) return Fail($"找不到修訂 {revId}。用 GET /revisions 查。");
-            var tt = FindTextType((string?)r["textTypeName"] ?? "BAF 3mm 內文(紅)");
+            var tt = FindTextType((string?)r["textTypeName"]);
             if (tt == null) return Fail("找不到文字類型。");
             double offMm = (double?)r["offsetMm"] ?? 4;
             var notes = new Dictionary<string, string>();

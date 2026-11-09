@@ -799,7 +799,7 @@ namespace RevitMcpAddin.Handlers
         }
 
         /// <summary>
-        /// 同一個編號只放一個標籤 —— A9-13 的材料標籤是「牆一個、地一個、天花一個」，
+        /// 同一個編號只放一個標籤 —— 廁所詳圖的材料標籤是「牆一個、地一個、天花一個」，
         /// 不是每道牆各一個。同編號的取最靠背牆（視線最深）的那個元件。
         /// </summary>
         private static List<TagTarget> DedupeByMark(List<TagTarget> targets, View view,

@@ -25,7 +25,7 @@ namespace RevitMcpAddin.Handlers
         private static object D(XYZ p) => p == null ? null : (object)new { x = Math.Round(p.X, 4), y = Math.Round(p.Y, 4), z = Math.Round(p.Z, 4) };
 
         // POST /elements/align-upright
-        // { familyName:"BAF_衛生紙架", ids:[..], upAxis:"Y"|"X", apply:false, includeGrouped:false, tolDeg:1.0 }
+        // { familyName:"範例_衛生紙架", ids:[..], upAxis:"Y"|"X", apply:false, includeGrouped:false, tolDeg:1.0 }
         public string Align(string body)
         {
             var r = string.IsNullOrWhiteSpace(body) ? new JObject() : JObject.Parse(body);

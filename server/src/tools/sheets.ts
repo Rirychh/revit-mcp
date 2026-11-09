@@ -107,7 +107,7 @@ Args:
 其他圖框用 titleBlocks 補（圖紙 mm，相對圖框原點）。
 Args:
   - items: [{sheetNumber, text}]
-  - textTypeName: 預設 "BAF 3mm 內文"
+  - textTypeName: 省略時用專案的第一個文字類型
   - titleBlocks: {類型名: {x, y, dy, chars, maxLines}}
   - apply: ${applyDesc}`,
     inputSchema: z.object({
@@ -131,7 +131,7 @@ Args:
 Args:
   - revisionId: 用 revit_list_revisions 查
   - notes: {圖號: 說明}
-  - textTypeName: 預設 "BAF 3mm 內文(紅)"
+  - textTypeName: 省略時用專案的第一個文字類型
   - offsetMm: 文字離雲形線角點的圖面距離，預設 4
   - apply: ${applyDesc}`,
     inputSchema: z.object({
