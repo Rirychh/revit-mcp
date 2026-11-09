@@ -24,19 +24,11 @@ namespace RevitMcpAddin.Handlers
         private readonly Document _doc;
         public StairsSweepHandler(Document doc) => _doc = doc;
 
-        private Level? LevelExact(string? name) =>
-            string.IsNullOrWhiteSpace(name) ? null : Levels(_doc).FirstOrDefault(l => l.Name == name)
-                ?? (Levels(_doc).Where(l => l.Name.IndexOf(name!, StringComparison.OrdinalIgnoreCase) >= 0).ToList() is var m && m.Count == 1 ? m[0] : null);
+        private Level? LevelExact(string? name) => FindLevelStrict(_doc, name);
 
         private string LevelNames() => string.Join("、", Levels(_doc).Select(l => l.Name));
 
-        private static List<XYZ> Pts(JToken? t, double zFt)
-        {
-            var o = new List<XYZ>();
-            foreach (var p in (t as JArray) ?? new JArray())
-                if (p is JArray a && a.Count >= 2) o.Add(new XYZ((double)a[0] / FT, (double)a[1] / FT, zFt));
-            return o;
-        }
+        private static List<XYZ> Pts(JToken? t, double zFt) => PolyMm(t, zFt, dropClosing: false);
 
         private static CurveLoop Rect(XYZ o, XYZ u, XYZ v, double lu, double lv0, double lv1, double z)
         {
@@ -251,6 +243,7 @@ namespace RevitMcpAddin.Handlers
             string tpl;
             try { tpl = FindTemplate((string?)r["template"]); } catch (Exception ex) { return Fail(ex.Message); }
             string folder = (string?)r["folder"] ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "revit-mcp", "profiles");
+            name = Naming.Prefixed(name, "profile");
             string path = Path.Combine(folder, name + ".rfa");
             bool load = (bool?)r["load"] ?? true;
             var exists = new FilteredElementCollector(_doc).OfClass(typeof(Family)).Cast<Family>().Any(f => f.Name == name);
@@ -280,7 +273,7 @@ namespace RevitMcpAddin.Handlers
             long famId = 0; var types = new List<string>();
             var res = RunTx(_doc, "MCP Load Profile", () =>
             {
-                if (_doc.LoadFamily(path, new LoadOpts(), out Family fam) && fam != null)
+                if (_doc.LoadFamily(path, FamilyLoad.Overwrite, out Family fam) && fam != null)
                 {
                     famId = fam.Id.Value;
                     foreach (var id in fam.GetFamilySymbolIds()) types.Add($"{fam.Name}: {_doc.GetElement(id).Name}");
@@ -293,13 +286,6 @@ namespace RevitMcpAddin.Handlers
             });
             return res.committed ? Ok(new { applied = true, savedTo = path, loaded = true, familyId = famId, profileTypes = types, plan, warnings = res.warnings })
                 : Fail($"輪廓族已存到 {path}，但載入專案失敗、專案沒有變更：" + string.Join("；", res.errors));
-        }
-
-        private class LoadOpts : IFamilyLoadOptions
-        {
-            public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = true; return true; }
-            public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues)
-            { source = FamilySource.Family; overwriteParameterValues = true; return true; }
         }
 
         private string FindTemplate(string? tpl)

@@ -133,6 +133,8 @@ namespace RevitMcpAddin.Handlers
                 throw new ArgumentException("savePath is required.");
             if (!req.SavePath.EndsWith(".rfa", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("savePath must end with .rfa");
+            req.SavePath = Path.Combine(Path.GetDirectoryName(req.SavePath) ?? "",
+                Naming.Prefixed(Path.GetFileNameWithoutExtension(req.SavePath)) + ".rfa");
             if (File.Exists(req.SavePath) && !req.Overwrite)
                 throw new InvalidOperationException($"File exists: {req.SavePath}");
 
@@ -180,7 +182,7 @@ namespace RevitMcpAddin.Handlers
                     if (!File.Exists(nf)) throw new FileNotFoundException("Nested family not found", nf);
                     using var tl = new Transaction(fdoc, "MCP Load Nested");
                     tl.Start();
-                    if (!fdoc.LoadFamily(nf, new OverwriteLoadOptions(), out _))
+                    if (!fdoc.LoadFamily(nf, FamilyLoad.Overwrite, out _))
                         _warn.Add($"LoadFamily returned false (already loaded?): {nf}");
                     tl.Commit();
                 }
@@ -307,7 +309,7 @@ namespace RevitMcpAddin.Handlers
                     if (proj == null) _warn.Add("No active project document; family saved but not loaded.");
                     else
                     {
-                        fdoc.LoadFamily(proj, new OverwriteLoadOptions());
+                        fdoc.LoadFamily(proj, FamilyLoad.Overwrite);
                         result.LoadedInto = proj.Title;
                     }
                 }
@@ -850,21 +852,5 @@ namespace RevitMcpAddin.Handlers
             }
         }
 
-        private class OverwriteLoadOptions : IFamilyLoadOptions
-        {
-            public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues)
-            {
-                overwriteParameterValues = true;
-                return true;
-            }
-
-            public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse,
-                                            out FamilySource source, out bool overwriteParameterValues)
-            {
-                source = FamilySource.Family;
-                overwriteParameterValues = true;
-                return true;
-            }
-        }
     }
 }

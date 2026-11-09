@@ -28,7 +28,7 @@ namespace RevitMcpAddin.Handlers
             int offset    = int.TryParse(qs["offset"], out var o) ? o : 0;
 
             var collector = (!string.IsNullOrEmpty(viewIdStr) && long.TryParse(viewIdStr, out var vId))
-                ? new FilteredElementCollector(_doc, new ElementId((int)vId)).WhereElementIsNotElementType()
+                ? new FilteredElementCollector(_doc, ElementIdCompat.NewId(vId)).WhereElementIsNotElementType()
                 : new FilteredElementCollector(_doc).WhereElementIsNotElementType();
 
             // 依 BuiltInCategory 過濾。categories=A,B,C 可一次多類；category 維持單類相容。
@@ -44,6 +44,14 @@ namespace RevitMcpAddin.Handlers
 
             // 區域過濾（mm，專案座標，只比對 XY）
             var box = ParseBBox(qs);
+            if (box != null)
+            {
+                // 先用 Revit 的快速篩選（只看外框）縮小範圍，再做逐筆的精確比對；大模型裡差很多。
+                const double tol = 1.0 / 304.8;
+                var ol = new Outline(new XYZ(box.MinX / 304.8 - tol, box.MinY / 304.8 - tol, -1e5),
+                                     new XYZ(box.MaxX / 304.8 + tol, box.MaxY / 304.8 + tol, 1e5));
+                collector = collector.WherePasses(new BoundingBoxIntersectsFilter(ol));
+            }
             var familyFilter = (qs["familyName"] ?? "")
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();

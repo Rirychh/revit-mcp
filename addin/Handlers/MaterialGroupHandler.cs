@@ -21,9 +21,6 @@ namespace RevitMcpAddin.Handlers
         private readonly Document _doc;
         public MaterialGroupHandler(Document doc) => _doc = doc;
 
-        private static string Done(string what, (bool committed, List<string> errors, List<string> warnings) res, object ok) =>
-            res.committed ? Ok(ok) : Fail(what + "失敗，已整批回滾、模型沒有變更：" + string.Join("；", res.errors));
-
         private List<Material> Mats() => new FilteredElementCollector(_doc).OfClass(typeof(Material)).Cast<Material>().OrderBy(m => m.Name).ToList();
 
         private static Material? FindMat(List<Material> mats, string? n) =>
@@ -320,7 +317,7 @@ namespace RevitMcpAddin.Handlers
                         t.Commit();
                         if (pre.HadError) return Fail("設定公式失敗、模型沒有變更：" + string.Join("；", pre.Errors));
                     }
-                    fdoc.LoadFamily(_doc, new LoadOpts());
+                    fdoc.LoadFamily(_doc, FamilyLoad.KeepProjectValues);
                 }
                 catch (Exception ex) { return Fail("編輯族檔失敗、模型沒有變更：" + ex.Message); }
                 finally { try { fdoc?.Close(false); } catch { } }
@@ -378,12 +375,5 @@ namespace RevitMcpAddin.Handlers
             throw new ArgumentException("不支援的參數型別");
         }
 
-        /// <summary>重新載入族時保留專案中既有的參數值（只帶入族檔的公式與定義）。</summary>
-        private class LoadOpts : IFamilyLoadOptions
-        {
-            public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = false; return true; }
-            public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues)
-            { source = FamilySource.Project; overwriteParameterValues = false; return true; }
-        }
     }
 }

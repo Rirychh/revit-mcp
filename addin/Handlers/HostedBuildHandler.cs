@@ -25,14 +25,7 @@ namespace RevitMcpAddin.Handlers
 
         private Level? LevelByName(string? name, double zFt) => FindLevel(_doc, name, zFt);
 
-        private static List<XYZ> Pts(JToken? t, double zFt)
-        {
-            var o = new List<XYZ>();
-            foreach (var p in (t as JArray) ?? new JArray())
-                if (p is JArray a && a.Count >= 2) o.Add(new XYZ((double)a[0] / FT, (double)a[1] / FT, zFt));
-            if (o.Count > 1 && o[0].DistanceTo(o[o.Count - 1]) < 1 / FT) o.RemoveAt(o.Count - 1);
-            return o;
-        }
+        private static List<XYZ> Pts(JToken? t, double zFt) => PolyMm(t, zFt, dropClosing: true);
 
         private static CurveLoop Loop(List<XYZ> pts)
         {

@@ -38,6 +38,7 @@ import { registerLinkedTools }   from "./tools/linked.js";
 import { registerSiteTools }     from "./tools/site.js";
 import { registerDocTools }      from "./tools/docs.js";
 import { installTargetGuard }    from "./services/targetGuard.js";
+import { installCompactTools }   from "./services/compactTools.js";
 import { registerViewSettingsTools } from "./tools/viewSettings.js";
 import { registerQcTools }       from "./tools/qc.js";
 import { registerDraftingTools } from "./tools/drafting.js";
@@ -52,13 +53,26 @@ import { registerProjectTools }  from "./tools/project.js";
 import { registerStairsSweepTools } from "./tools/stairsSweep.js";
 import { registerTypesAreasTools } from "./tools/typesAreas.js";
 
-const server = new McpServer({
-  name:    "revit-mcp-server",
-  version: "1.0.0",
-});
+const INSTRUCTIONS = [
+  "操作開著的 Autodesk Revit 模型。",
+  "單位：長度一律 mm（座標也是 mm，模型座標或視圖平面 uv），面積 m²、體積 m³。",
+  "會改模型的工具預設只預檢（apply=false 或 dryRun=true）：先看回報，確認後再用 apply=true 執行；一次呼叫在單一交易裡完成，任何錯誤整批回滾、模型不變。",
+  "不知道名稱或 id 時先查：樓層 revit_list_levels、類型 revit_list_build_types、元件 revit_list_elements、視圖 revit_list_views、圖紙 revit_list_sheets。",
+  "要確認結果長什麼樣：revit_screenshot_view，或 revit_labeled_snapshot（圖上標號對照元件 id）。",
+  "多個 Revit 同時開著時，會改模型的工具要加 document（作用中檔名關鍵字）或先用 revit_use_instance 指定目標；沒指定會擋下不執行。",
+  "刪除、清除、關檔、同步中央這類動作執行前先跟使用者確認。",
+  "新建族（build_family、輪廓族、量體）若有 %LOCALAPPDATA%\\revit-mcp\\naming.json，會自動補上設定的前綴；最終名稱以回傳結果為準。",
+].join("\n");
+
+const server = new McpServer(
+  { name: "revit-mcp-server", version: "1.10.2" },
+  { instructions: INSTRUCTIONS },
+);
 
 // 必須在註冊工具前：會改模型的工具一律加 document 參數與多 Revit 防呆
 installTargetGuard(server);
+// 在 targetGuard 外層：先整理描述（Args 搬進參數說明、加相近工具），再交給 targetGuard
+installCompactTools(server);
 
 registerInstanceTools(server);
 registerElementTools(server);

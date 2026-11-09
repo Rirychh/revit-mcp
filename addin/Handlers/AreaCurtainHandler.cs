@@ -22,12 +22,7 @@ namespace RevitMcpAddin.Handlers
         private readonly Document _doc;
         public AreaCurtainHandler(Document doc) => _doc = doc;
 
-        private Level? LevelExact(string? name) =>
-            string.IsNullOrWhiteSpace(name) ? null : Levels(_doc).FirstOrDefault(l => l.Name == name)
-                ?? (Levels(_doc).Where(l => l.Name.IndexOf(name!, StringComparison.OrdinalIgnoreCase) >= 0).ToList() is var m && m.Count == 1 ? m[0] : null);
-
-        private static string Done(string what, (bool committed, List<string> errors, List<string> warnings) res, object ok) =>
-            res.committed ? Ok(ok) : Fail(what + "失敗，已整批回滾、模型沒有變更：" + string.Join("；", res.errors));
+        private Level? LevelExact(string? name) => FindLevelStrict(_doc, name);
 
         // ── 面積平面 ─────────────────────────────────────────
         // POST /areas

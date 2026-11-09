@@ -77,6 +77,7 @@ namespace RevitMcpAddin.Handlers
                     fdoc.FamilyCreate.NewExtrusionForm(true, ra, new XYZ(0, 0, (b.ZMax - b.ZMin) * MM));
                     t.Commit();
                 }
+                b.Name = Naming.Prefixed(b.Name, "mass");
                 string path = System.IO.Path.Combine(outDir, b.Name + ".rfa");
                 fdoc.SaveAs(path, new SaveAsOptions { OverwriteExistingFile = true });
                 fdoc.Close(false);
@@ -113,7 +114,7 @@ namespace RevitMcpAddin.Handlers
                 doc.Regenerate();
                 foreach (var (b, path) in famPaths)
                 {
-                    if (!doc.LoadFamily(path, new LoadOpts(), out Family fam)) throw new InvalidOperationException("載入失敗：" + path);
+                    if (!doc.LoadFamily(path, FamilyLoad.Overwrite, out Family fam)) throw new InvalidOperationException("載入失敗：" + path);
                     var sym = doc.GetElement(fam.GetFamilySymbolIds().First()) as FamilySymbol ?? throw new InvalidOperationException("無類型");
                     if (!sym.IsActive) sym.Activate();
                     var inst = doc.Create.NewFamilyInstance(new XYZ(0, 0, b.ZMin * MM), sym, StructuralType.NonStructural);
@@ -151,11 +152,6 @@ namespace RevitMcpAddin.Handlers
             return Ok(new { document = doc.Title, template = tpl, familyFolder = outDir, masses = results, floors, totalFloorAreaM2 = Math.Round(total, 2), notes });
         }
 
-        class LoadOpts : IFamilyLoadOptions
-        {
-            public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = true; return true; }
-            public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues) { source = FamilySource.Family; overwriteParameterValues = true; return true; }
-        }
         class Swallow : IFailuresPreprocessor
         {
             public FailureProcessingResult PreprocessFailures(FailuresAccessor fa)

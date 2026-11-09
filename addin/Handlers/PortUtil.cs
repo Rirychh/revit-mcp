@@ -20,6 +20,23 @@ namespace RevitMcpAddin.Handlers
 #pragma warning restore IDE1006
     }
 
+    /// <summary>載入族時遇到同名族的處理方式（取代各 Handler 自己的 IFamilyLoadOptions）。</summary>
+    internal sealed class FamilyLoad : IFamilyLoadOptions
+    {
+        /// <summary>覆寫：重新載入並用族檔的參數值。</summary>
+        public static readonly FamilyLoad Overwrite = new FamilyLoad(true, true, FamilySource.Family);
+        /// <summary>重新載入但保留專案中既有的參數值（只帶入公式與定義）。</summary>
+        public static readonly FamilyLoad KeepProjectValues = new FamilyLoad(true, false, FamilySource.Project);
+        /// <summary>同名族已存在就不載入。</summary>
+        public static readonly FamilyLoad SkipExisting = new FamilyLoad(false, false, FamilySource.Family);
+
+        private readonly bool _load, _values; private readonly FamilySource _source;
+        public FamilyLoad(bool load, bool overwriteValues, FamilySource source) { _load = load; _values = overwriteValues; _source = source; }
+        public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = _values; return _load; }
+        public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues)
+        { source = _source; overwriteParameterValues = _values; return _load; }
+    }
+
     /// <summary>
     /// 分析／MEP／建模／修改／載入族群這批 Handler 共用的小工具。
     /// 幾何一律 mm、專案內部座標（與 BuildHandler、ElementHandler 相同：mm / 304.8 = ft）。
@@ -241,6 +258,29 @@ namespace RevitMcpAddin.Handlers
                 }
             }
             return (true, errors, pre.SwallowedWarnings);
+        }
+
+        /// <summary>交易結果轉成回應：成功回 ok，失敗說明已整批回滾。</summary>
+        public static string Done(string what, (bool committed, List<string> errors, List<string> warnings) res, object ok) =>
+            res.committed ? Ok(ok) : Fail($"{what}失敗，已整批回滾、模型沒有變更：" + string.Join("；", res.errors));
+
+        /// <summary>依名稱找樓層：完全相符優先，否則只在「包含」比對結果唯一時採用；沒給名稱回 null。</summary>
+        public static Level? FindLevelStrict(Document doc, string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            var all = Levels(doc);
+            return all.FirstOrDefault(l => l.Name == name)
+                   ?? (all.Where(l => l.Name.IndexOf(name!, StringComparison.OrdinalIgnoreCase) >= 0).ToList() is var m && m.Count == 1 ? m[0] : null);
+        }
+
+        /// <summary>[[x,y],...]（mm）→ 指定高程的點列（ft）；dropClosing=true 時拿掉與起點重合的最後一點。</summary>
+        public static List<XYZ> PolyMm(JToken? t, double zFt, bool dropClosing)
+        {
+            var o = new List<XYZ>();
+            foreach (var p in (t as JArray) ?? new JArray())
+                if (p is JArray a && a.Count >= 2) o.Add(new XYZ((double)a[0] * FtPerMm, (double)a[1] * FtPerMm, zFt));
+            if (dropClosing && o.Count > 1 && o[0].DistanceTo(o[o.Count - 1]) < FtPerMm) o.RemoveAt(o.Count - 1);
+            return o;
         }
 
         public static void SetDouble(Element el, BuiltInParameter bip, double ft)

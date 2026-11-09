@@ -261,6 +261,28 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_export_dwg` | 把視圖或圖紙匯出成 DWG，可用專案裡的匯出設定。apply=false 預檢並列出可用設定。 |
 | `revit_export_nwc` | 匯出 Navisworks NWC（整個模型或指定 3D 視圖）；需要電腦已安裝 NWC 匯出器。apply=false 預檢。 |
 
+## 命名設定（選用）
+
+在 `%LOCALAPPDATA%\revit-mcp\naming.json` 放一份設定，可以統一新建族的命名與預設文字類型；沒有這個檔就全部不套用。改完存檔即生效，不用重開 Revit。
+
+```json
+{
+  "familyPrefix": "XX_",
+  "profilePrefix": null,
+  "massPrefix": null,
+  "textType": "3mm 內文",
+  "revisionCloudTextType": null,
+  "titleBlocks": {
+    "A1 圖框": { "x": 119, "y": 42.5, "dy": 9.8, "chars": 18, "maxLines": 3 }
+  }
+}
+```
+
+- `familyPrefix`：`revit_build_family`、輪廓族、量體新建時自動補上的前綴；名稱已帶前綴就不重複加。
+- `profilePrefix` / `massPrefix`：輪廓族、量體另外指定前綴，`null` 沿用 `familyPrefix`。
+- `textType`：`revit_write_revision_notes` 的預設文字類型；`revisionCloudTextType`：`revit_annotate_revision_clouds` 的預設文字類型（`null` 沿用 `textType`）。專案裡找不到時用第一個文字類型。
+- `titleBlocks`：修訂說明寫進各圖框的位置（mm，相對圖框插入點）；呼叫時傳入的 `titleBlocks` 同名時優先。
+
 ## 支援的 AI
 
 **Revit 內的對話面板**：上方「AI」選單切換 Claude／GPT／Gemini，各家 API 金鑰分開存在 Windows 認證管理員。「模型」欄可改模型 ID（預設 `claude-sonnet-5`、`gpt-5`、`gemini-2.5-pro`）。三家共用同一份 `tools-manifest.json`；Gemini 不支援的 JSON Schema 關鍵字會自動轉換。

@@ -103,11 +103,11 @@ Args:
   server.registerTool("revit_write_revision_notes", {
     title: "Write revision notes into title blocks",
     description: `把修正說明寫進各圖紙圖框的「修訂內容」欄（新增 TextNote，自動在、，處換行）。
-修訂欄已有文字的圖紙會略過。內建座標：範例圖框(執照圖)/(顧問) x=119 y=42.5 dy=9.8 每行18字 最多3行；
-其他圖框用 titleBlocks 補（圖紙 mm，相對圖框原點）。
+修訂欄已有文字的圖紙會略過。各圖框的寫入座標讀 naming.json 的 titleBlocks；
+沒設定的圖框用參數 titleBlocks 補（圖紙 mm，相對圖框原點），同名時以參數為準。
 Args:
   - items: [{sheetNumber, text}]
-  - textTypeName: 省略時用專案的第一個文字類型
+  - textTypeName: 省略時用 naming.json 的 textType，沒設定就用專案第一個文字類型
   - titleBlocks: {類型名: {x, y, dy, chars, maxLines}}
   - apply: ${applyDesc}`,
     inputSchema: z.object({
@@ -131,7 +131,7 @@ Args:
 Args:
   - revisionId: 用 revit_list_revisions 查
   - notes: {圖號: 說明}
-  - textTypeName: 省略時用專案的第一個文字類型
+  - textTypeName: 省略時用 naming.json 的 revisionCloudTextType（沒有則 textType），沒設定就用專案第一個文字類型
   - offsetMm: 文字離雲形線角點的圖面距離，預設 4
   - apply: ${applyDesc}`,
     inputSchema: z.object({
