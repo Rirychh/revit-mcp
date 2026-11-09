@@ -266,7 +266,9 @@ namespace RevitMcpAddin.Handlers
             }
 
             if (e.Location is LocationPoint lp)
-                dto.Rotation = lp.Rotation * 180.0 / Math.PI;
+            {
+                try { dto.Rotation = lp.Rotation * 180.0 / Math.PI; } catch { /* 房間等元件的位置點不支援旋轉 */ }
+            }
 
             if (fullParams)
             {

@@ -131,6 +131,17 @@ namespace RevitMcpAddin.Handlers
 
             tx.Commit();
 
+            // 提交後核對：Revit 處理錯誤時可能把剛建立的元件刪掉
+            var gone = result.CreatedIds
+                .Where(i => _doc.GetElement(ElementIdCompat.NewId(i)) == null).ToList();
+            if (gone.Count > 0)
+            {
+                result.CreatedIds.RemoveAll(i => gone.Contains(i));
+                result.CreatedCount -= gone.Count;
+                result.SkippedCount += gone.Count;
+                result.Warnings.Add($"{gone.Count} 個元件在提交時被 Revit 刪除（可能脫離主體或重疊錯誤）");
+            }
+
             foreach (var s in swallow.Swallowed.Distinct().Take(10))
                 result.Warnings.Add("[已吞警告] " + s);
         }
@@ -155,10 +166,13 @@ namespace RevitMcpAddin.Handlers
                 var symbol = src.Symbol;
                 if (!symbol.IsActive) symbol.Activate();
 
+                // 2026-11-04：放置時直接用來源的 X 軸當參考方向。
+                // 舊做法是放好後再 RotateElement；面掛族群旋轉後常被判定脫離主體，
+                // 提交時被 Revit 刪掉，工具卻仍回報成功。
+                var refDir = SourceRefDir(src);
                 var inst = _doc.Create.NewFamilyInstance(
-                    hit.Value.Reference, hit.Value.Point, XYZ.BasisX, symbol);
+                    hit.Value.Reference, hit.Value.Point, refDir, symbol);
 
-                MatchRotation(src, inst);
                 CopyCustomParams(src, inst);
 
                 result.CreatedIds.Add(inst.Id.IntegerValue);
@@ -170,6 +184,19 @@ namespace RevitMcpAddin.Handlers
                 result.Warnings.Add($"{src.Id.IntegerValue} 放置失敗：{ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>來源實體的 X 軸投影到水平面；取不到就用 BasisX。</summary>
+        private static XYZ SourceRefDir(FamilyInstance src)
+        {
+            try
+            {
+                var bx = src.GetTransform().BasisX;
+                var h = new XYZ(bx.X, bx.Y, 0);
+                if (h.GetLength() > 1e-6) return h.Normalize();
+            }
+            catch { }
+            return XYZ.BasisX;
         }
 
         private void MatchRotation(FamilyInstance src, FamilyInstance dst)

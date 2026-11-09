@@ -53,6 +53,23 @@ Args:
     }).strict(), annotations: W,
   }, async (a) => { try { return ok(await revitRequest<Any>("post", "/views/categories", undefined, a)); } catch (e) { return err(e); } });
 
+  server.registerTool("revit_show_grids_3d", {
+    title: "Show grids in 3D views",
+    description: `設定 3D 視圖的「顯示柱線」（Show Grids，Revit 2022+）：柱線畫在哪些樓層平面上。
+只有與該樓層平面相交的柱線會顯示。此設定不屬於視圖樣板，要逐一視圖設定。透視圖不顯示柱線標頭。
+Args:
+  - viewIds: 目標 3D 視圖 id
+  - levels: 樓層名稱（或 id 字串），例如 ["1FL"]；mode=clear 時可省略
+  - mode: set＝取代為指定樓層（預設）／add＝加入／remove＝移除／clear＝全部關閉
+  - apply: ${applyDesc}`,
+    inputSchema: z.object({
+      viewIds: z.array(z.number().int()).min(1),
+      levels: z.array(z.string()).optional(),
+      mode: z.enum(["set", "add", "remove", "clear"]).default("set"),
+      apply: z.boolean().default(false),
+    }).strict(), annotations: W,
+  }, async (a) => { try { return ok(await revitRequest<Any>("post", "/views/grids3d", undefined, a)); } catch (e) { return err(e); } });
+
   server.registerTool("revit_delete_in_link", {
     title: "Delete elements inside a linked .rvt",
     description: `刪除「被連結的 Revit 檔」裡的元件，並把結果存回那個檔案。

@@ -109,6 +109,56 @@ Use before a UI-only command such as Manage > Design Options > Add to Set.`,
     try { return txt(await revitRequest("post", "/selection", undefined, a, LONG)); } catch (e) { return err(e); }
   });
 
+  server.registerTool("revit_select_category", {
+    title: "Select All Of A Category",
+    description: `Select every element of one or more categories in the ACTIVE document — whole project, or only what is visible in one view — optionally limited to one level.
+Typical use: select all structural columns, then the user runs Manage > Design Options > Add to Set (UI-only; the API cannot move elements into an option).
+Elements already in a design option are skipped by default (excludeInOptions).
+apply=false (default) only reports the count per level; apply=true makes the selection in the Revit window.`,
+    inputSchema: z.object({
+      categories: z.array(z.string()).min(1).describe("OST_ names (OST_StructuralColumns) or display names (結構柱)"),
+      viewId: z.number().int().optional().describe("Only elements visible in this view; omit = whole project"),
+      levelName: z.string().optional(),
+      excludeInOptions: z.boolean().default(true),
+      zoom: z.boolean().default(false),
+      apply: z.boolean().default(false),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (a) => {
+    try { return txt(await revitRequest("post", "/selection/category", undefined, a, LONG)); } catch (e) { return err(e); }
+  });
+
+  server.registerTool("revit_cad_wall_diff", {
+    title: "Compare CAD Walls With Revit Walls (and build missing ones)",
+    description: `Compare the wall lines of a DWG linked/imported into a plan view with the Revit walls visible in that view.
+Reads the CAD geometry straight from Revit (already in model coordinates — no DXF export, no alignment), keeps layers whose name contains one of 'layers' (default ["WALL"]), pairs parallel double lines into centerlines + thickness, then reports:
+  - newWalls: CAD walls with no visible Revit wall within matchTolMm (CAD has it, Revit doesn't)
+  - obsoleteWalls: visible Revit walls with < 30% of their length near CAD wall lines (Revit has it, CAD doesn't)
+  - partialWalls: Revit walls 30–85% covered, with the uncovered stretches (often a door opening — check before trimming)
+Only walls VISIBLE in the view are considered, so walls hidden on purpose are never listed.
+apply=false (default) changes nothing. apply=true creates the newWalls on the view's level: wallTypeName if given, otherwise the basic wall type whose width is closest to each CAD thickness; height = heightMm or the median height of this level's visible walls.
+It never deletes anything — confirm obsoleteWalls with the user, then use revit_delete_elements.
+Use region (mm) to work one zone at a time on big floors.`,
+    inputSchema: z.object({
+      viewId: z.number().int().describe("Plan view that shows the DWG (the DWG may be view-specific)"),
+      cadName: z.string().optional().describe("Substring of the DWG name; omit = every DWG in the view"),
+      layers: z.array(z.string()).optional().describe("Layer-name keywords, default [\"WALL\"]"),
+      region: z.object({ minX: z.number(), minY: z.number(), maxX: z.number(), maxY: z.number() }).optional(),
+      minThicknessMm: z.number().default(70),
+      maxThicknessMm: z.number().default(650),
+      angleTolDeg: z.number().default(1.0),
+      matchTolMm: z.number().default(300),
+      minLengthMm: z.number().default(300),
+      maxResults: z.number().int().default(200),
+      apply: z.boolean().default(false),
+      wallTypeName: z.string().optional(),
+      heightMm: z.number().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (a) => {
+    try { return txt(await revitRequest("post", "/cad/wall-diff", undefined, a, LONG)); } catch (e) { return err(e); }
+  });
+
   server.registerTool("revit_mass_boxes", {
     title: "Create Mass Boxes",
     description: `Create conceptual masses (one Metric Mass family per box: extruded rectangle or polygon loop) in a project, optionally creating/updating levels and adding mass floors so floor areas are reported.

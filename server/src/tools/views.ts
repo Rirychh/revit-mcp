@@ -178,7 +178,12 @@ Args:
   - planName / elevName: 命名樣式（預設 {room}_plan / {room}_elev）
   - alignElevToRoom: 立面方向對齊房間長邊
   - elevAngleDeg: 直接指定立面角度（度），覆寫 alignElevToRoom
-  - dryRun: true = 預檢（預設）；false 才會寫入模型`,
+  - includeLinks: 也搜尋 Revit 連結模型裡的房間（預設 true；座標自動轉成主模型座標）
+  - createPlan: 是否另建平面放大圖（預設 true）
+  - hostPlanViewId: 立面標記要放在哪張既有平面圖上；createPlan=false 時必填
+  - planTypeName / elevTypeName: 平面／立面的視圖類型名稱（如「建築立面 1/30-廁所立面」），可只給部分字串
+  - dryRun: true = 預檢（預設）；false 才會寫入模型
+立面上下緣（topMm / bottomMm）以房間地板高程為基準。`,
     inputSchema: z.object({
       roomNumbers:     z.array(z.string()).optional(),
       nameContains:    z.string().optional(),
@@ -194,6 +199,11 @@ Args:
       elevName:        z.string().default("{room}_elev"),
       alignElevToRoom: z.boolean().default(false),
       elevAngleDeg:    z.number().optional(),
+      includeLinks:    z.boolean().default(true),
+      createPlan:      z.boolean().default(true),
+      hostPlanViewId:  z.number().int().optional(),
+      planTypeName:    z.string().optional(),
+      elevTypeName:    z.string().optional(),
       dryRun:          z.boolean().default(true),
     }).strict(), annotations: W,
   }, async (a) => { try { return ok(await revitRequest<Any>("post", "/rooms/views", undefined, a, LONG)); } catch (e) { return err(e); } });

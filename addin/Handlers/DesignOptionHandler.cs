@@ -103,6 +103,91 @@ namespace RevitMcpAddin.Handlers
             return Ok(new { document = doc.Title, selected = ok.Count, missing });
         }
 
+        /// <summary>
+        /// POST /selection/category：把某品類的元素全部選起來（整個專案或某視圖內，可限定樓層），
+        /// 給「管理 → 設計選項 → 新增至集合」這類只能在 UI 做的指令接手。
+        /// </summary>
+        public string SelectCategory(string body)
+        {
+            var req = JsonConvert.DeserializeObject<SelCatReq>(body ?? "{}") ?? new SelCatReq();
+            var uidoc = _uiApp.ActiveUIDocument ?? throw new InvalidOperationException("No active Revit document.");
+            var doc = uidoc.Document;
+            if (req.Categories == null || req.Categories.Count == 0)
+                throw new ArgumentException("categories 必填，例如 [\"OST_StructuralColumns\"] 或 [\"結構柱\"]。");
+
+            var catIds = new List<ElementId>(); var unknown = new List<string>();
+            foreach (var c in req.Categories)
+            {
+                ElementId? id = null;
+                if (Enum.TryParse<BuiltInCategory>(c, true, out var bic))
+                {
+                    try { var cat = Category.GetCategory(doc, bic); if (cat != null) id = cat.Id; } catch { }
+                }
+                if (id == null)
+                    foreach (Category cat in doc.Settings.Categories)
+                        if (string.Equals(cat.Name, c, StringComparison.OrdinalIgnoreCase)) { id = cat.Id; break; }
+                if (id == null) unknown.Add(c); else catIds.Add(id);
+            }
+            if (catIds.Count == 0) throw new ArgumentException("找不到品類：" + string.Join(", ", unknown));
+
+            FilteredElementCollector col = req.ViewId.HasValue
+                ? new FilteredElementCollector(doc, ElementIdCompat.NewId(req.ViewId.Value))
+                : new FilteredElementCollector(doc);
+            var els = col.WherePasses(new ElementMulticategoryFilter(catIds)).WhereElementIsNotElementType().ToElements();
+
+            var ids = new List<ElementId>();
+            var byLevel = new Dictionary<string, int>();
+            foreach (var e in els)
+            {
+                string lvName = "";
+                try
+                {
+                    var lid = e.LevelId;
+                    if ((lid == null || lid == ElementId.InvalidElementId))
+                    {
+                        var p = e.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_PARAM) ?? e.get_Parameter(BuiltInParameter.SCHEDULE_LEVEL_PARAM);
+                        lid = p?.AsElementId();
+                    }
+                    if (lid != null && lid != ElementId.InvalidElementId) lvName = doc.GetElement(lid)?.Name ?? "";
+                }
+                catch { }
+                if (!string.IsNullOrWhiteSpace(req.LevelName) && !string.Equals(lvName, req.LevelName, StringComparison.OrdinalIgnoreCase)) continue;
+                if (req.ExcludeInOptions)
+                {
+                    DesignOption? d = null; try { d = e.DesignOption; } catch { }
+                    if (d != null) continue;
+                }
+                ids.Add(e.Id);
+                var k = string.IsNullOrEmpty(lvName) ? "（無樓層）" : lvName;
+                byLevel[k] = byLevel.TryGetValue(k, out var n) ? n + 1 : 1;
+            }
+
+            if (req.Apply)
+            {
+                uidoc.Selection.SetElementIds(ids);
+                if (req.Zoom && ids.Count > 0) { try { uidoc.ShowElements(ids); } catch { } }
+            }
+            return Ok(new
+            {
+                document = doc.Title,
+                applied = req.Apply,
+                count = ids.Count,
+                byLevel,
+                unknownCategories = unknown,
+                next = req.Apply ? "已選取。接著在 Revit：管理 → 設計選項 → 新增至集合，勾選目標選項。" : "預檢；apply=true 才會真的選取。"
+            });
+        }
+
+        public class SelCatReq
+        {
+            [JsonProperty("categories")] public List<string>? Categories { get; set; }
+            [JsonProperty("viewId")] public long? ViewId { get; set; }
+            [JsonProperty("levelName")] public string? LevelName { get; set; }
+            [JsonProperty("excludeInOptions")] public bool ExcludeInOptions { get; set; } = true;
+            [JsonProperty("zoom")] public bool Zoom { get; set; } = false;
+            [JsonProperty("apply")] public bool Apply { get; set; } = false;
+        }
+
         public class SelReq
         {
             [JsonProperty("document")] public string? Document { get; set; }

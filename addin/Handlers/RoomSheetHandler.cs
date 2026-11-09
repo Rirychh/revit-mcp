@@ -26,6 +26,12 @@ namespace RevitMcpAddin.Handlers
         [JsonProperty("dryRun")]           public bool DryRun { get; set; } = true;
         [JsonProperty("alignElevToRoom")] public bool AlignElevToRoom { get; set; } = false;
         [JsonProperty("elevAngleDeg")]    public double? ElevAngleDeg { get; set; }
+        // 2026-11-04 新增：連結模型房間、指定視圖類型、沿用既有平面圖當立面宿主
+        [JsonProperty("includeLinks")]    public bool IncludeLinks { get; set; } = true;
+        [JsonProperty("createPlan")]      public bool CreatePlan { get; set; } = true;
+        [JsonProperty("hostPlanViewId")]  public long? HostPlanViewId { get; set; }
+        [JsonProperty("planTypeName")]    public string? PlanTypeName { get; set; }
+        [JsonProperty("elevTypeName")]    public string? ElevTypeName { get; set; }
     }
 
     public class SheetSpec
@@ -74,49 +80,138 @@ namespace RevitMcpAddin.Handlers
         private static double Ft(double mm) => mm / FTMM;
         private static double Mm(double ft) => ft * FTMM;
 
+        /// <summary>主模型或連結模型裡的房間；Xf 把房間座標轉成主模型座標。</summary>
+        private sealed class RoomRef
+        {
+            public Room Room = null!;
+            public Transform Xf = Transform.Identity;
+            public string Source = "";
+            public string Number => Room.Number ?? "";
+            public string Name   => Room.Name ?? "";
+            public string LevelName => Room.Level?.Name ?? "";
+        }
+
+        private List<RoomRef> CollectRooms(bool includeLinks)
+        {
+            var list = new List<RoomRef>();
+            void Add(Document d, Transform xf, string label)
+            {
+                foreach (var r in new FilteredElementCollector(d)
+                             .OfCategory(BuiltInCategory.OST_Rooms)
+                             .WhereElementIsNotElementType()
+                             .OfType<Room>())
+                {
+                    if (r.Area <= 0) continue;              // 未放置或未封閉
+                    list.Add(new RoomRef { Room = r, Xf = xf, Source = label });
+                }
+            }
+            Add(_doc, Transform.Identity, "本模型");
+            if (includeLinks)
+            {
+                var seen = new HashSet<string>();
+                foreach (var li in new FilteredElementCollector(_doc)
+                             .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>())
+                {
+                    var ld = li.GetLinkDocument();
+                    if (ld == null || !seen.Add(ld.Title)) continue;
+                    Add(ld, li.GetTotalTransform(), ld.Title);
+                }
+            }
+            return list;
+        }
+
+        /// <summary>房間外框轉成主模型座標的軸向外框。</summary>
+        private static BoundingBoxXYZ? HostBox(RoomRef r)
+        {
+            var bb = r.Room.get_BoundingBox(null);
+            if (bb == null) return null;
+            var pts = new List<XYZ>();
+            foreach (var x in new[] { bb.Min.X, bb.Max.X })
+                foreach (var y in new[] { bb.Min.Y, bb.Max.Y })
+                    foreach (var z in new[] { bb.Min.Z, bb.Max.Z })
+                        pts.Add(r.Xf.OfPoint(bb.Transform.OfPoint(new XYZ(x, y, z))));
+            return new BoundingBoxXYZ
+            {
+                Min = new XYZ(pts.Min(p => p.X), pts.Min(p => p.Y), pts.Min(p => p.Z)),
+                Max = new XYZ(pts.Max(p => p.X), pts.Max(p => p.Y), pts.Max(p => p.Z))
+            };
+        }
+
+        /// <summary>主模型裡對應的樓層：同名且高程相近優先，否則取高程最接近者。</summary>
+        private Level? HostLevel(RoomRef r)
+        {
+            var lv = r.Room.Level;
+            if (lv == null) return null;
+            double z = r.Xf.OfPoint(new XYZ(0, 0, lv.ProjectElevation)).Z;
+            var levels = new FilteredElementCollector(_doc).OfClass(typeof(Level)).Cast<Level>().ToList();
+            var byName = levels.FirstOrDefault(l => l.Name == lv.Name);
+            if (byName != null && Math.Abs(byName.ProjectElevation - z) < Ft(50)) return byName;
+            var nearest = levels.OrderBy(l => Math.Abs(l.ProjectElevation - z)).FirstOrDefault();
+            if (nearest != null && byName != null && nearest.Id != byName.Id)
+                _warn.Add($"{r.Number}: 同名樓層 {lv.Name} 高程不符，改用高程最接近的 {nearest.Name}");
+            return nearest;
+        }
+
+        private ViewFamilyType FindVft(ViewFamily fam, string? typeName)
+        {
+            var all = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType))
+                .Cast<ViewFamilyType>().Where(v => v.ViewFamily == fam).ToList();
+            if (!string.IsNullOrEmpty(typeName))
+            {
+                var hit = all.FirstOrDefault(v => v.Name == typeName)
+                          ?? all.FirstOrDefault(v => v.Name.Contains(typeName!));
+                if (hit != null) return hit;
+                _warn.Add($"view type not found: {typeName}（改用預設）");
+            }
+            return all.FirstOrDefault() ?? throw new InvalidOperationException("No " + fam + " ViewFamilyType.");
+        }
+
         public string CreateRoomViews(string body)
         {
             var req = JsonConvert.DeserializeObject<RoomViewSetRequest>(body)
                       ?? throw new ArgumentException("Invalid body.");
 
-            var rooms = new FilteredElementCollector(_doc)
-                .OfCategory(BuiltInCategory.OST_Rooms)
-                .WhereElementIsNotElementType()
-                .OfType<Room>()
-                .Where(r => r.Area > 0)
-                .ToList();
+            var rooms = CollectRooms(req.IncludeLinks);
 
             if (req.RoomNumbers.Count > 0)
                 rooms = rooms.Where(r => req.RoomNumbers.Contains(r.Number)).ToList();
             else if (!string.IsNullOrEmpty(req.NameContains))
-                rooms = rooms.Where(r => (r.Name ?? "").Contains(req.NameContains!)).ToList();
+                rooms = rooms.Where(r => r.Name.Contains(req.NameContains!)).ToList();
 
-            rooms = rooms.OrderBy(r => r.Level?.Elevation ?? 0).ThenBy(r => r.Number).ToList();
+            rooms = rooms.OrderBy(r => r.Room.Level?.ProjectElevation ?? 0).ThenBy(r => r.Number).ToList();
 
+            View? hostPlan = null;
+            if (req.HostPlanViewId.HasValue)
+            {
+                hostPlan = _doc.GetElement(ElementIdCompat.NewId(req.HostPlanViewId.Value)) as View;
+                if (hostPlan is not ViewPlan)
+                    throw new ArgumentException("hostPlanViewId 不是平面視圖: " + req.HostPlanViewId);
+            }
+            if (!req.CreatePlan && hostPlan == null && req.ElevationCount > 0)
+                throw new ArgumentException("createPlan=false 時要給 hostPlanViewId，立面標記需要一張平面圖當宿主。");
+
+            int nElev = Math.Max(0, Math.Min(4, req.ElevationCount));
             var planned = rooms.Select(r => new
             {
                 number = r.Number,
                 name   = r.Name,
-                level  = r.Level?.Name ?? "",
-                planView  = Expand(req.PlanName, r),
-                elevViews = Enumerable.Range(0, Math.Max(0, Math.Min(4, req.ElevationCount)))
-                                      .Select(i => Expand(req.ElevName, r) + Suffix(i)).ToList()
+                level  = r.LevelName,
+                source = r.Source,
+                hostLevel = HostLevel(r)?.Name,
+                planView  = req.CreatePlan ? Expand(req.PlanName, r) : null,
+                hostPlan  = hostPlan?.Name,
+                elevViews = Enumerable.Range(0, nElev).Select(i => Expand(req.ElevName, r) + Suffix(i)).ToList()
             }).ToList();
 
             if (req.DryRun)
                 return JsonConvert.SerializeObject(new
                 {
                     success = true,
-                    data = new { dryRun = true, roomCount = rooms.Count, planned }
+                    data = new { dryRun = true, roomCount = rooms.Count, planned, warnings = _warn }
                 });
 
-            var planVft = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType))
-                .Cast<ViewFamilyType>().FirstOrDefault(v => v.ViewFamily == ViewFamily.FloorPlan)
-                ?? throw new InvalidOperationException("No FloorPlan ViewFamilyType.");
-            var elevVft = new FilteredElementCollector(_doc).OfClass(typeof(ViewFamilyType))
-                .Cast<ViewFamilyType>().FirstOrDefault(v => v.ViewFamily == ViewFamily.Elevation)
-                ?? throw new InvalidOperationException("No Elevation ViewFamilyType.");
-
+            var planVft = FindVft(ViewFamily.FloorPlan, req.PlanTypeName);
+            var elevVft = FindVft(ViewFamily.Elevation, req.ElevTypeName);
             var planTpl = FindTemplate(req.PlanTemplate);
             var elevTpl = FindTemplate(req.ElevTemplate);
 
@@ -132,55 +227,61 @@ namespace RevitMcpAddin.Handlers
             {
                 try
                 {
-                    var lvl = room.Level ?? throw new InvalidOperationException("room has no level");
-                    var bb  = room.get_BoundingBox(null)
-                              ?? throw new InvalidOperationException("room has no bounding box");
+                    var bb = HostBox(room) ?? throw new InvalidOperationException("room has no bounding box");
                     double m = Ft(req.MarginMm);
+                    var entry = new List<object>();
 
-                    var vp = ViewPlan.Create(_doc, planVft.Id, lvl.Id);
-                    SafeName(vp, Expand(req.PlanName, room));
-                    if (planTpl != null) vp.ViewTemplateId = planTpl.Id;
-                    vp.Scale = req.Scale;
-                    vp.CropBoxActive = true;
-                    vp.CropBoxVisible = false;
-                    vp.CropBox = new BoundingBoxXYZ
+                    View? markerHost = hostPlan;
+                    if (req.CreatePlan)
                     {
-                        Min = new XYZ(bb.Min.X - m, bb.Min.Y - m, bb.Min.Z),
-                        Max = new XYZ(bb.Max.X + m, bb.Max.Y + m, bb.Max.Z)
-                    };
+                        var lvl = HostLevel(room) ?? throw new InvalidOperationException("找不到對應的主模型樓層");
+                        var vp = ViewPlan.Create(_doc, planVft.Id, lvl.Id);
+                        SafeName(vp, Expand(req.PlanName, room));
+                        if (planTpl != null) vp.ViewTemplateId = planTpl.Id;
+                        vp.Scale = req.Scale;
+                        vp.CropBoxActive = true;
+                        vp.CropBoxVisible = false;
+                        vp.CropBox = new BoundingBoxXYZ
+                        {
+                            Min = new XYZ(bb.Min.X - m, bb.Min.Y - m, bb.Min.Z),
+                            Max = new XYZ(bb.Max.X + m, bb.Max.Y + m, bb.Max.Z)
+                        };
+                        entry.Add(new { kind = "plan", id = vp.Id.Value, name = vp.Name });
+                        markerHost ??= vp;
+                    }
 
-                    var entry = new List<object> { new { kind = "plan", id = vp.Id.Value, name = vp.Name } };
-
-                    int n = Math.Max(0, Math.Min(4, req.ElevationCount));
-                    if (n > 0)
+                    if (nElev > 0 && markerHost != null)
                     {
                         var cx = (bb.Min.X + bb.Max.X) / 2;
                         var cy = (bb.Min.Y + bb.Max.Y) / 2;
-                        var cz = lvl.Elevation + Ft(1200);
+                        var floorZ = bb.Min.Z;                       // 房間底面＝地板
+                        var cz = floorZ + Ft(1200);
                         var marker = ElevationMarker.CreateElevationMarker(
                             _doc, elevVft.Id, new XYZ(cx, cy, cz), req.Scale);
 
-                        for (int i = 0; i < n; i++)
-                        {
-                            var ev = marker.CreateElevation(_doc, vp.Id, i);
-                            SafeName(ev, Expand(req.ElevName, room) + Suffix(i));
-                            if (elevTpl != null) ev.ViewTemplateId = elevTpl.Id;
-                            ev.Scale = req.Scale;
-                            CropElevation(ev, bb, lvl, req);
-                            entry.Add(new { kind = "elevation", id = ev.Id.Value, name = ev.Name });
-                        }
-
+                        // 先旋轉標記再建立立面，裁剪才會對齊旋轉後的方向
                         double? rotDeg = req.ElevAngleDeg;
                         if (rotDeg == null && req.AlignElevToRoom) rotDeg = RoomEdgeAngleDeg(room);
                         if (rotDeg.HasValue && Math.Abs(rotDeg.Value) > 1e-6)
                         {
                             var axis = Line.CreateBound(new XYZ(cx, cy, cz), new XYZ(cx, cy, cz + 1));
                             ElementTransformUtils.RotateElement(_doc, marker.Id, axis, rotDeg.Value * Math.PI / 180.0);
-                            _warn.Add($"marker rotated {Math.Round(rotDeg.Value,3)} deg");
+                            _warn.Add($"{room.Number}: marker rotated {Math.Round(rotDeg.Value, 3)} deg");
                         }
+
+                        for (int i = 0; i < nElev; i++)
+                        {
+                            var ev = marker.CreateElevation(_doc, markerHost.Id, i);
+                            SafeName(ev, Expand(req.ElevName, room) + Suffix(i));
+                            if (elevTpl != null) ev.ViewTemplateId = elevTpl.Id;
+                            ev.Scale = req.Scale;
+                            CropElevation(ev, bb, floorZ, req);
+                            entry.Add(new { kind = "elevation", id = ev.Id.Value, name = ev.Name });
+                        }
+                        entry.Add(new { kind = "marker", id = marker.Id.Value, hostPlan = markerHost.Name });
                     }
 
-                    made.Add(new { room = room.Number, level = room.Level?.Name, views = entry });
+                    made.Add(new { room = room.Number, source = room.Source, level = room.LevelName, views = entry });
                 }
                 catch (Exception ex)
                 {
@@ -196,13 +297,13 @@ namespace RevitMcpAddin.Handlers
             });
         }
 
-        private void CropElevation(ViewSection ev, BoundingBoxXYZ roomBb, Level lvl, RoomViewSetRequest req)
+        private void CropElevation(ViewSection ev, BoundingBoxXYZ roomBb, double floorZ, RoomViewSetRequest req)
         {
             try
             {
                 double m   = Ft(req.MarginMm);
-                double zLo = lvl.Elevation + Ft(req.BottomMm);
-                double zHi = lvl.Elevation + Ft(req.TopMm);
+                double zLo = floorZ + Ft(req.BottomMm);
+                double zHi = floorZ + Ft(req.TopMm);
 
                 var corners = new List<XYZ>();
                 foreach (var x in new[] { roomBb.Min.X - m, roomBb.Max.X + m })
@@ -229,6 +330,7 @@ namespace RevitMcpAddin.Handlers
             }
             catch (Exception ex) { _warn.Add("crop elevation: " + ex.Message); }
         }
+
         public string CreateSheets(string body)
         {
             var req = JsonConvert.DeserializeObject<SheetCreateRequest>(body)
@@ -463,8 +565,9 @@ namespace RevitMcpAddin.Handlers
             }
         }
         /// <summary>房間最長邊相對水平的夾角（已折到 -45~45 度），用來把立面標記轉成垂直牆面。</summary>
-        private static double RoomEdgeAngleDeg(Room r)
+        private static double RoomEdgeAngleDeg(RoomRef rr)
         {
+            var r = rr.Room;
             var opt = new SpatialElementBoundaryOptions();
             double best = 0, bestLen = -1;
             var loops = r.GetBoundarySegments(opt);
@@ -477,7 +580,7 @@ namespace RevitMcpAddin.Handlers
                     if (len > bestLen)
                     {
                         bestLen = len;
-                        var d = ln.Direction;
+                        var d = rr.Xf.OfVector(ln.Direction);   // 連結模型的旋轉也算進去
                         best = Math.Atan2(d.Y, d.X) * 180.0 / Math.PI;
                     }
                 }
@@ -486,10 +589,10 @@ namespace RevitMcpAddin.Handlers
         }
         private static string Suffix(int i) => i switch { 0 => "a", 1 => "b", 2 => "c", _ => "d" };
 
-        private static string Expand(string pattern, Room r) => pattern
-            .Replace("{room}",  r.Number ?? "")
-            .Replace("{name}",  r.Name ?? "")
-            .Replace("{level}", r.Level?.Name ?? "");
+        private static string Expand(string pattern, RoomRef r) => pattern
+            .Replace("{room}",  r.Number)
+            .Replace("{name}",  r.Name)
+            .Replace("{level}", r.LevelName);
 
         private void SafeName(View v, string wanted)
         {

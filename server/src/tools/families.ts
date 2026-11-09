@@ -107,7 +107,7 @@ Visibility: set visibleParam to a yes/no parameter name. Formula parameters (e.g
 Typical workflow for a code box: build one small family per code with a glyph, then build the host family that nests them and exposes familyType parameters.
 
 Args:
-  - savePath (string): output .rfa path, e.g. "C:\\\\temp\\\\X.rfa"
+  - savePath (string): output .rfa path, e.g. "D:\\\\REVIT_ex\\\\_families\\\\X.rfa"
   - template (string, optional): .rft path or file name
   - typeName (string, optional)
   - parameters, nestedFamilies, elements: see schema

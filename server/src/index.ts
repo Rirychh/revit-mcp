@@ -46,6 +46,11 @@ import { registerAnalysisTools } from "./tools/analysis.js";
 import { registerMepTools }      from "./tools/mep.js";
 import { registerModelingTools } from "./tools/modeling.js";
 import { registerLayoutTools }   from "./tools/layout.js";
+import { registerEditTools }     from "./tools/edit.js";
+import { registerViewAnnotTools } from "./tools/viewAnnot.js";
+import { registerProjectTools }  from "./tools/project.js";
+import { registerStairsSweepTools } from "./tools/stairsSweep.js";
+import { registerTypesAreasTools } from "./tools/typesAreas.js";
 
 const server = new McpServer({
   name:    "revit-mcp-server",
@@ -74,6 +79,11 @@ registerAnalysisTools(server);
 registerMepTools(server);
 registerModelingTools(server);
 registerLayoutTools(server);
+registerEditTools(server);
+registerViewAnnotTools(server);
+registerProjectTools(server);
+registerStairsSweepTools(server);
+registerTypesAreasTools(server);
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();

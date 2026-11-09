@@ -194,7 +194,7 @@ namespace RevitMcpAddin.UI
                                     : "面板就緒。直接輸入指令，例如「列出所有樓層」。", false);
         }
 
-        private string TitleText() => AiProviders.DisplayName(_provider) + " · Revit   © 2026 Rita (Rirychh)";
+        private string TitleText() => AiProviders.DisplayName(_provider) + " · Revit";
 
         /// <summary>切換 AI 供應商：載入該家金鑰與模型，重新開始對話。</summary>
         private void SwitchProvider(AiProvider p)

@@ -15,11 +15,11 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `addin/` | C# Revit 增益集：在 Revit 內啟動本機 HTTP 服務、執行 Revit API；另含 Claude 對話面板 |
 | `addin/installer/` | HTA 安裝精靈與安裝腳本 |
 | `addin/license-tool/` | 授權碼發行工具（ECDSA P-256 簽章，綁 Windows 帳號／電腦／到期日） |
-| `server/` | TypeScript MCP server，提供 119 個 Revit 工具，見下方「功能」 |
+| `server/` | TypeScript MCP server，提供 165 個 Revit 工具，見下方「功能」 |
 
 ## 功能
 
-共 119 個 Revit 工具，另有 2 個同時開多個 Revit 時用來切換的工具（`revit_list_instances`、`revit_use_instance`）。會改模型的工具預設只預檢（`apply=false`），回報會做什麼，確認後再用 `apply=true` 在單一交易裡執行，任何錯誤整批回滾。長度單位一律 mm。
+共 165 個 Revit 工具，另有 2 個同時開多個 Revit 時用來切換的工具（`revit_list_instances`、`revit_use_instance`）。會改模型的工具預設只預檢（`apply=false`），回報會做什麼，確認後再用 `apply=true` 在單一交易裡執行，任何錯誤整批回滾。長度單位一律 mm。
 
 ### 文件與專案
 
@@ -36,6 +36,11 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_sync_with_central` | 與中央模型同步（工作共用模型），可一併存本機檔與釋放工作集。 |
 | `revit_sync_status` | 回報工作共用狀態：是否 workshared、中央檔路徑、使用者、是否有未存變更。 |
 | `revit_clear_model` | 刪除文件裡的模型元件實例（牆、樓板、門、家具、房間、模型群組、基地、量體…），例如專案樣板內附的範例建築。視圖、圖紙、標高、軸網、註解與類型會保留。 |
+| `revit_project_info` | 讀取或設定專案資訊（專案名稱、編號、業主、地址、狀態、發行日期等）。不給 set＝只讀。 |
+| `revit_project_units` | 讀取或設定專案單位：長度（mm／cm／m）、面積、體積與小數位數、角度小數位數。 |
+| `revit_add_project_parameter` | 新增專案參數並綁定到品類（實例或類型；文字、數字、整數、長度、面積、是／否）。apply=false 預檢。 |
+| `revit_set_phases` | 列出階段與階段篩選；設定元件的建立／拆除階段、視圖的階段與階段篩選。apply=false 預檢。 |
+| `revit_worksets` | 工作集：列出（擁有者、是否開啟／可編輯）、新建、把元件移到指定工作集（略過被別人借用的）。apply=false 預檢。 |
 
 ### 查詢與選取
 
@@ -51,6 +56,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_get_selection` | 讀取使用者目前在 Revit 中選取的元件（唯讀）。 |
 | `revit_select_elements` | 在 Revit 視窗中依 id 選取元件（取代目前選取），可同時縮放到選取範圍。 |
 | `revit_list_design_options` | 列出設計選項集與其選項：id、名稱、哪個是主要、哪個是作用中，以及各選項（與主模型）各有多少模型元素。 |
+| `revit_select_category` | 把某品類的元件全部選起來（整個專案或某視圖內，可限定樓層），給「設計選項 → 新增至集合」等 UI 指令接手。 |
 
 ### 建模
 
@@ -66,6 +72,16 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_create_rooms` | 在點位建立房間。apply=false 預檢。 |
 | `revit_create_room_separation` | 建立房間分隔線。apply=false 預檢。 |
 | `revit_mass_boxes` | 在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。 |
+| `revit_place_doors_windows` | 把門窗放進牆：給點位會自動找最近的直牆並投影到牆中心線，可設窗台高、翻轉。apply=false 預檢。 |
+| `revit_create_ceilings` | 建立天花板：依房間（以房間完成面邊界）或指定迴圈，可設離地高度。apply=false 預檢。 |
+| `revit_create_roof` | 依跡線建立屋頂，可設坡度（每條邊都定義坡度，形成四坡）與基準偏移。apply=false 預檢。 |
+| `revit_create_opening` | 建立開口：牆上矩形開口、跨樓層豎井、樓板／屋頂／天花上的開口。apply=false 預檢。 |
+| `revit_create_stairs` | 依兩個樓層建立組合樓梯：直跑、L 型或 U 型（含平台），欄杆可保留、換類型或刪除。apply=false 預檢並算出級數、級高、級深。 |
+| `revit_create_railings` | 建立欄杆：沿折線路徑（指定樓層），或掛在既有樓梯上。apply=false 預檢並列出欄杆類型。 |
+| `revit_create_sweeps` | 建立掃掠：牆飾條／分割縫（可指定輪廓與高度）、樓板邊緣（沿樓板頂面外圍）、封簷板與排水溝（沿屋頂簷口）。apply=false 預檢。 |
+| `revit_curtain_wall` | 帷幕牆：查格線／嵌板／豎框、加垂直或水平格線、在格線上加豎框、換嵌板類型。apply=false 預檢。 |
+| `revit_attach_walls` | 牆頂或牆底附著到屋頂、樓板、天花（或取消附著）；Revit 2025 以上。apply=false 預檢。 |
+| `revit_area_plans` | 面積平面：列出面積配置與面積、建立面積平面、畫面積邊界（迴圈或沿房間邊界）、放置面積。apply=false 預檢。 |
 
 ### 修改
 
@@ -81,6 +97,13 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_ungroup_groups` | 解除指定的群組實例（只動被指名的 groupIds）。 |
 | `revit_find_element_constraints` | 唯讀：找出哪些尺寸標註／對齊約束參考到指定元件（搬不動元件時用來查兇手）。 |
 | `revit_delete_elements` | 依 ElementId 刪除作用中模型裡的元素（任何品類：模型構件、註解、製圖線等）。 |
+| `revit_move_elements` | 依向量移動元件（mm），可一次多個。釘選或在群組內的會跳過並說明。apply=false 預檢。 |
+| `revit_array_elements` | 照向量複製元件，count>1 為線性陣列（第 i 份位移 delta×i）。apply=false 預檢。 |
+| `revit_change_type` | 把元件換成同族群或同品類的其他類型（例如牆換牆類型、門換門類型）。apply=false 預檢並列出可換的類型。 |
+| `revit_duplicate_type` | 複製出新類型（例如新的牆類型），可設定總厚度（牆、樓板、屋頂、天花）與類型參數。apply=false 預檢。 |
+| `revit_join_geometry` | 接合／取消接合／切換接合順序（例如牆與樓板、柱與梁）；也可給一批元件，自動接合彼此相交的組合。apply=false 預檢。 |
+| `revit_set_type_layers` | 讀取或設定牆／樓板／屋頂／天花類型的構造層（功能、材料、厚度、核心層）。apply=false 預檢。 |
+| `revit_groups` | 群組：列出群組類型與數量、把元件建成群組（可命名）、在指定位置放置群組。apply=false 預檢。 |
 
 ### 族群
 
@@ -90,6 +113,9 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_load_families` | 從 .rfa 載入族群。apply=false 預檢。 |
 | `revit_inspect_family` | 唯讀檢查族群：參考平面、視圖方向、幾何草圖平面。 |
 | `revit_scan_family_labels` | 掃描 .rfa 檔／資料夾，或作用中專案裡的註解族，列出含標籤（label）的族及其族參數。不需先開啟專案。 |
+| `revit_create_profile_family` | 依封閉點位建立輪廓族（.rfa，公制輪廓樣板）並載入專案，供牆飾條、樓板邊緣、欄杆等使用。apply=false 預檢。 |
+| `revit_family_type_params` | 可載入族的類型參數：列出各類型參數值、修改類型參數值、設定公式（開族檔改公式後重新載入）。apply=false 預檢。 |
+| `revit_purge_all` | 全面清除未使用項目（族群、類型、材質、樣式…，等同「清除未使用的項目」），可多輪；Revit 2024 以上。dryRun 預設 true。 |
 
 ### 視圖
 
@@ -109,6 +135,15 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_update_view_properties` | 修改視圖的比例與名稱。 |
 | `revit_screenshot_view` | 把指定視圖輸出成 PNG 到暫存檔，回傳影像資訊。 |
 | `revit_labeled_snapshot` | 暫時在元件上標數字（可隔離）後輸出視圖圖片，再整批回滾；回傳圖檔與「數字→元件 id」對照，讓 AI 看圖定位。 |
+| `revit_set_view_range` | 讀取或設定平面視圖的視圖範圍（頂部、剖切面、底部、視圖深度，相對所屬樓層的偏移 mm）。apply=false 先回報目前值。 |
+| `revit_set_view_display` | 設定視圖的詳細等級、視覺樣式、專業、範圍框（可一次多張）。apply=false 先回報目前值。 |
+| `revit_create_view_filter` | 建立視圖篩選器（品類＋參數條件）並套到視圖，可設可見性、顏色、半色調、線寬；同名篩選器會直接沿用。apply=false 預檢。 |
+| `revit_create_view_template` | 從現有視圖建立視圖樣板（等同「從目前視圖建立樣板」）。apply=false 預檢。 |
+| `revit_set_visibility` | 暫時隔離／隱藏元件或品類、重設暫時隱藏；或永久隱藏／取消隱藏元件。apply=false 預檢。 |
+| `revit_set_section_box` | 設定 3D 視圖剖面框：框住指定元件（外擴 marginMm）或指定範圍，也可關閉。apply=false 預檢。 |
+| `revit_create_elevations` | 在平面放一個立面標記，建立指定方向的立面視圖（north＝北向立面，看北側外牆）。apply=false 預檢。 |
+| `revit_create_callout` | 在平面、剖面或立面上框一塊建立詳圖索引視圖（可命名、設比例）。apply=false 預檢。 |
+| `revit_show_grids_3d` | 設定 3D 視圖的「顯示柱線」（Show Grids）：柱線畫在哪些樓層平面上。只有與樓層平面相交的柱線會顯示；此設定不屬於視圖樣板。 |
 
 ### 標籤與尺寸
 
@@ -125,6 +160,11 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_create_wall_dimension_chains` | 在平面視圖自動建立牆的連續尺寸線（牆兩側面或單側面，可含軸線），水平、垂直或兩向。apply=false 預檢。 |
 | `revit_inspect_dimensions` | 列出視圖中的線性尺寸：各段長度、過短段落、尺寸線位置，並找出平行且靠太近（< 300 mm）的尺寸線。 |
 | `revit_adjust_dimensions` | 移動尺寸線（垂直於尺寸線平移，或 uv 位移）、刪除重複的尺寸。apply=false 預檢。 |
+| `revit_tag_rooms` | 在平面視圖幫房間放房間標籤（預設：視圖所在樓層、還沒標的房間）。apply=false 預檢。 |
+| `revit_add_text_notes` | 在任何 2D 視圖或圖紙上放文字註記（可指定文字類型與換行寬度）。apply=false 預檢。 |
+| `revit_add_spot_elevations` | 在樓板、屋頂、天花等主體的頂面放高程點（可指定點位，否則取中心）。apply=false 預檢。 |
+| `revit_add_filled_regions` | 在 2D 視圖畫填滿區域（例如材料圖例、範圍示意），可指定填滿區域類型。apply=false 預檢。 |
+| `revit_place_detail_components` | 在 2D 視圖放詳圖元件（可旋轉）；族群需先載入。apply=false 預檢。 |
 
 ### 圖紙與修訂
 
@@ -140,6 +180,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_list_revisions` | 列出專案所有修訂（id、順序、描述、日期、雲形線數量）。 |
 | `revit_write_revision_notes` | 把修正說明寫進各圖紙圖框的「修訂內容」欄（新增 TextNote，自動在、，處換行）。 |
 | `revit_annotate_revision_clouds` | 在指定修訂的每個雲形線右上角加文字＋直線引線，文字依雲形線所在圖紙的圖號從 notes 取。 |
+| `revit_add_revision_clouds` | 在圖紙或 2D 視圖畫矩形修訂雲形線，掛到既有修訂或新建一筆修訂。apply=false 預檢。 |
 
 ### 製圖視圖與線
 
@@ -161,6 +202,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_list_schedules` | 列出模型中的明細表（id、名稱、品類、欄位數）。 |
 | `revit_get_schedule_data` | 讀取明細表內容（表頭與本體，可分頁），照明細表畫面原樣呈現。 |
 | `revit_export_schedule` | 把一個或多個明細表視圖匯出為 CSV。 |
+| `revit_schedule_settings` | 明細表排序／群組、篩選、逐項列出、總計、隱藏欄位；不給設定＝讀目前設定。apply=false 預檢。 |
 
 ### CAD 與連結
 
@@ -172,6 +214,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_link_revit` | 把 .rvt 連結進文件（預設原點對原點，shared＝依共用座標），可同時取得其共用座標。 |
 | `revit_move_link` | 移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。 |
 | `revit_delete_in_link` | 刪除「被連結的 Revit 檔」裡的元件，並把結果存回那個檔案。 |
+| `revit_cad_wall_diff` | 視圖中 DWG 牆線與 Revit 可見牆比對：列出 CAD 有 Revit 沒有（newWalls）、Revit 有 CAD 沒有（obsoleteWalls／partialWalls）；apply=true 依 newWalls 建牆。 |
 
 ### 基地與材質
 
@@ -182,6 +225,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `revit_site_directshapes` | 查詢（或刪除）符合條件的 DirectShape 基地模元素。 |
 | `revit_set_site_materials` | 依註解關鍵字規則批次指定基地模 DirectShape／地形的材質與顏色。 |
 | `revit_set_material_appearance` | 為材質建立／更新「一般」彩現外觀（漫射色、透明度、光澤），Enscape 可見。 |
+| `revit_materials` | 材料：列出、建立（可複製既有材料、設顏色與透明度）、指定到元件或類型的材料參數。apply=false 預檢。 |
 
 ### MEP
 
@@ -214,6 +258,8 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | 工具 | 說明 |
 |---|---|
 | `revit_export_ifc` | 把作用中模型匯出為 IFC 2x3 CV2 檔。 |
+| `revit_export_dwg` | 把視圖或圖紙匯出成 DWG，可用專案裡的匯出設定。apply=false 預檢並列出可用設定。 |
+| `revit_export_nwc` | 匯出 Navisworks NWC（整個模型或指定 3D 視圖）；需要電腦已安裝 NWC 匯出器。apply=false 預檢。 |
 
 ## 支援的 AI
 

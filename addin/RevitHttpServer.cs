@@ -1,4 +1,4 @@
-﻿// Revit MCP — © 2026 Rita (Rirychh)
+// Revit MCP — © 2026 Rita (Rirychh)
 // https://github.com/Rirychh/revit-mcp
 // SPDX-License-Identifier: MIT
 
@@ -373,6 +373,7 @@ namespace RevitMcpAddin
                     "/views/templates"  when method == "GET"  => new ViewSettingsHandler(doc).ListTemplates(),
                     "/views/template"   when method == "POST" => new ViewSettingsHandler(doc).ApplyTemplate(body),
                     "/views/categories" when method == "POST" => new ViewSettingsHandler(doc).SetCategories(body),
+                    "/views/grids3d"    when method == "POST" => new ViewSettingsHandler(doc).SetGrids3d(body),
 
                 var p when p.StartsWith("/views/") && p.EndsWith("/screenshot") && method == "GET"
                     => viewHandler.TakeScreenshot(ParseId(p, "/views/", "/screenshot")),
@@ -408,6 +409,8 @@ namespace RevitMcpAddin
                 "/documents/info"        when method == "GET"  => new DocumentOpsHandler(uiApp).Info(qs),
                 "/design-options"        when method == "GET"  => new DesignOptionHandler(uiApp).List(qs),
                 "/selection"             when method == "POST" => new DesignOptionHandler(uiApp).Select(body),
+                "/selection/category"    when method == "POST" => new DesignOptionHandler(uiApp).SelectCategory(body),
+                "/cad/wall-diff"         when method == "POST" => new CadWallHandler(uiApp).Diff(body),
                 "/documents/save"        when method == "POST" => new DocumentOpsHandler(uiApp).Save(body),
                     "/links/delete-elements" when method == "POST" => new LinkEditHandler(uiApp).DeleteElements(body),
                 "/documents/activate"    when method == "POST" => new DocumentOpsHandler(uiApp).Activate(body),
@@ -468,6 +471,55 @@ namespace RevitMcpAddin
                 "/mep/connectors"                     when method == "GET"  => new MepConnectorHandler(doc).Inspect(qs),
                 "/mep/route"                          when method == "POST" => new MepConnectorHandler(doc).Route(body),
                 "/mep/audit"                          when method == "GET"  => new MepConnectorHandler(doc).Audit(qs),
+
+                // ── 一般建模與修改（2026-11 第 1 批：讓 AI 能像使用者一樣操作）──
+                "/elements/move"         when method == "POST" => new EditOpsHandler(doc).Move(body),
+                "/elements/array"        when method == "POST" => new EditOpsHandler(doc).ArrayCopy(body),
+                "/elements/change-type"  when method == "POST" => new EditOpsHandler(doc).ChangeType(body),
+                "/types/duplicate"       when method == "POST" => new EditOpsHandler(doc).DuplicateType(body),
+                "/geometry/join"         when method == "POST" => new EditOpsHandler(doc).Join(body),
+                "/hosted/place"          when method == "POST" => new HostedBuildHandler(doc).PlaceHosted(body),
+                "/ceilings"              when method == "POST" => new HostedBuildHandler(doc).Ceilings(body),
+                "/roofs"                 when method == "POST" => new HostedBuildHandler(doc).Roofs(body),
+                "/openings"              when method == "POST" => new HostedBuildHandler(doc).Openings(body),
+
+                // ── 視圖設定與一般註解（2026-11 第 2 批）──
+                "/views/range"                    when method == "POST" => new ViewSetupHandler(doc).ViewRange(body),
+                "/views/display"                  when method == "POST" => new ViewSetupHandler(doc).Display(body),
+                "/views/filters"                  when method == "POST" => new ViewSetupHandler(doc).Filter(body),
+                "/views/template-from-view"       when method == "POST" => new ViewSetupHandler(doc).TemplateFromView(body),
+                "/views/visibility"               when method == "POST" => new ViewSetupHandler(doc).Visibility(body),
+                "/views/section-box"              when method == "POST" => new ViewSetupHandler(doc).SectionBox(body),
+                "/views/elevations"               when method == "POST" => new ViewSetupHandler(doc).Elevations(body),
+                "/views/callout"                  when method == "POST" => new ViewSetupHandler(doc).Callout(body),
+                "/annotations/text"               when method == "POST" => new AnnotateHandler(doc).Text(body),
+                "/annotations/spot-elevations"    when method == "POST" => new AnnotateHandler(doc).SpotElevations(body),
+                "/annotations/filled-regions"     when method == "POST" => new AnnotateHandler(doc).FilledRegions(body),
+                "/annotations/detail-components"  when method == "POST" => new AnnotateHandler(doc).DetailComponents(body),
+                "/annotations/room-tags"          when method == "POST" => new AnnotateHandler(doc).RoomTags(body),
+                "/revisions/clouds"               when method == "POST" => new AnnotateHandler(doc).RevisionClouds(body),
+
+                // ── 專案設定與輸出（2026-11 第 3 批）──
+                "/project/info"        when method == "POST" => new ProjectSetupHandler(doc).Info(body),
+                "/project/units"       when method == "POST" => new ProjectSetupHandler(doc).Units(body),
+                "/project/parameters"  when method == "POST" => new ProjectSetupHandler(doc).AddParameter(body),
+                "/project/phases"      when method == "POST" => new ProjectSetupHandler(doc).Phases(body),
+                "/project/worksets"    when method == "POST" => new ProjectSetupHandler(doc).Worksets(body),
+                "/export/dwg"          when method == "POST" => new ProjectSetupHandler(doc).ExportDwg(body),
+                "/export/nwc"          when method == "POST" => new ProjectSetupHandler(doc).ExportNwc(body),
+                "/purge/all"           when method == "POST" => new ProjectSetupHandler(doc).PurgeAll(body),
+                "/stairs"              when method == "POST" => new StairsSweepHandler(doc).Stairs(body),
+                "/railings"            when method == "POST" => new StairsSweepHandler(doc).Railings(body),
+                "/families/profile"    when method == "POST" => new StairsSweepHandler(doc).ProfileFamily(body),
+                "/sweeps"              when method == "POST" => new StairsSweepHandler(doc).Sweeps(body),
+                "/areas"               when method == "POST" => new AreaCurtainHandler(doc).Areas(body),
+                "/curtain"             when method == "POST" => new AreaCurtainHandler(doc).Curtain(body),
+                "/walls/attach"        when method == "POST" => new AreaCurtainHandler(doc).AttachWalls(body),
+                "/types/layers"        when method == "POST" => new AreaCurtainHandler(doc).Layers(body),
+                "/materials"           when method == "POST" => new MaterialGroupHandler(doc).Materials(body),
+                "/groups"              when method == "POST" => new MaterialGroupHandler(doc).Groups(body),
+                "/schedules/settings"  when method == "POST" => new MaterialGroupHandler(doc).ScheduleSettings(body),
+                "/families/type-params" when method == "POST" => new MaterialGroupHandler(doc).FamilyTypeParams(body),
 
                 _ => JsonConvert.SerializeObject(new { success = false, error = $"Unknown route: {method} {path}" })
             };
