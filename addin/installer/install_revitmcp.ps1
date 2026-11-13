@@ -71,7 +71,26 @@ function Set-ClaudeEntry([string]$cfgPath, $entry) {
 }
 
 function Get-InstalledRevit {
-    $Versions | Where-Object { Test-Path "C:\Program Files\Autodesk\Revit $_\Revit.exe" }
+    # 預設路徑之外，也從「新增或移除程式」登錄找安裝位置（Revit 裝在 D 槽等非預設位置時）
+    $uninst = @()
+    foreach ($k in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*")) {
+        $uninst += @(Get-ItemProperty $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^(Autodesk )?Revit 20\d\d' })
+    }
+    $Versions | Where-Object {
+        $v = $_
+        if (Test-Path "C:\Program Files\Autodesk\Revit $v\Revit.exe") { return $true }
+        foreach ($u in $uninst) {
+            if ($u.DisplayName -match "^(Autodesk )?Revit $v(\b|\.)" -and $u.InstallLocation -and (Test-Path (Join-Path $u.InstallLocation "Revit.exe"))) { return $true }
+        }
+        return $false
+    }
+}
+
+function Assert-ServerNotRunning {
+    # Claude Desktop 開著時，它啟動的 MCP server（node.exe）會鎖住安裝資料夾裡的檔案
+    if ($TestRoot) { return }
+    $busy = @(Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($InstallDir, [StringComparison]::OrdinalIgnoreCase) })
+    if ($busy.Count -gt 0) { throw "Claude Desktop 還開著（正在使用 Revit MCP）。請完全關閉 Claude Desktop（右下角系統匣圖示也要結束）後再按一次。" }
 }
 
 function Assert-RevitClosed {
@@ -85,6 +104,7 @@ try {
 
     "install" {
         Assert-RevitClosed
+        Assert-ServerNotRunning
         Remove-Item $OldLicFile -Force -ErrorAction SilentlyContinue
 
         # STEP3 Revit add-in（每位使用者自己的 Addins 資料夾，不需要系統管理員權限）
@@ -132,6 +152,13 @@ try {
         if ($rc -ge 8) { throw "複製 MCP server 失敗（robocopy $rc）。若 Claude Desktop 開著，請先完全關閉（含系統匣圖示）後重試。" }
         Copy-Item (Join-Path $Payload "node\node.exe") (Join-Path $nodeDir "node.exe") -Force
         Copy-Item (Join-Path $Payload "version.txt") (Join-Path $InstallDir "version.txt") -Force -ErrorAction SilentlyContinue
+        # 命名設定：使用者已有 naming.json 就不覆蓋
+        $namingSrc = Join-Path $Payload "naming.json"
+        $namingDst = Join-Path $LocalAppData "revit-mcp\naming.json"
+        if ((Test-Path $namingSrc) -and -not (Test-Path $namingDst)) {
+            New-Item -ItemType Directory -Force (Split-Path $namingDst) | Out-Null
+            Copy-Item $namingSrc $namingDst
+        }
         Report "STEP4|server"
 
         # STEP5 Claude Desktop 設定
@@ -146,6 +173,7 @@ try {
 
     "uninstall" {
         Assert-RevitClosed
+        Assert-ServerNotRunning
         foreach ($v in $Versions) {
             $addinRoot = Join-Path $AppData "Autodesk\Revit\Addins\$v"
             Remove-Item (Join-Path $addinRoot "RevitMcpAddin.addin") -Force -ErrorAction SilentlyContinue

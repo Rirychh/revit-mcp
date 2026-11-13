@@ -1,0 +1,12 @@
+{
+  "familyPrefix": null,
+  "profilePrefix": null,
+  "massPrefix": null,
+  "textType": null,
+  "revisionCloudTextType": null,
+  "titleBlocks": {
+    "範例圖框(執照圖)": { "x": 119, "y": 42.5, "dy": 9.8, "chars": 18, "maxLines": 3 },
+    "範例圖框(顧問)": { "x": 119, "y": 42.5, "dy": 9.8, "chars": 18, "maxLines": 3 },
+    "範例圖框(細設圖)": { "x": 471.5, "y": 52, "dy": 10.5, "chars": 22, "maxLines": 4 }
+  }
+}

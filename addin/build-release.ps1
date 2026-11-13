@@ -31,6 +31,8 @@ $payload = Join-Path $stage "payload"
 Copy-Item (Join-Path $root "installer\_雙擊我_RevitMCP安裝.hta") $stage
 Copy-Item (Join-Path $root "installer\install_revitmcp.ps1") $stage
 Copy-Item (Join-Path $root "installer\安裝說明.txt") $stage
+Copy-Item (Join-Path $root "installer\RevitMCP.ico") $stage
+Copy-Item (Join-Path $root "installer\set_icon.ps1") $stage
 
 # add-in
 foreach ($v in $Versions) {
@@ -45,12 +47,18 @@ $mcp = Join-Path $payload "mcp"
 New-Item -ItemType Directory -Force $mcp | Out-Null
 Copy-Item (Join-Path $tsRepo "dist") $mcp -Recurse
 Copy-Item (Join-Path $tsRepo "package.json"), (Join-Path $tsRepo "package-lock.json") $mcp
+# server 執行時會呼叫的輔助腳本（例：add-to-set-dialog.ps1，由 dist/tools/docs.js 以 ../../scripts 取用）
+if (Test-Path (Join-Path $tsRepo "scripts")) { Copy-Item (Join-Path $tsRepo "scripts") $mcp -Recurse }
 Get-ChildItem (Join-Path $mcp "dist") -Recurse -Include *.map, *.d.ts | Remove-Item -Force
 Push-Location $mcp; try { & npm.cmd ci --omit=dev --no-audit --no-fund --loglevel=error; if ($LASTEXITCODE -ne 0) { throw "npm ci 失敗" } } finally { Pop-Location }
 
 # 隨附 Node.js（同仁不必另外安裝）
 New-Item -ItemType Directory -Force (Join-Path $payload "node") | Out-Null
 Copy-Item (Get-Command node.exe).Source (Join-Path $payload "node\node.exe")
+
+# 命名設定（預設範例；使用者電腦已有就不覆蓋）
+$naming = Join-Path $root "installer\naming.json"
+if (Test-Path $naming) { Copy-Item $naming (Join-Path $payload "naming.json") }
 
 [IO.File]::WriteAllText((Join-Path $payload "version.txt"), "RevitMCP $ver  build $(Get-Date -Format 'yyyy-MM-dd HH:mm')`r`n", (New-Object Text.UTF8Encoding($false)))
 

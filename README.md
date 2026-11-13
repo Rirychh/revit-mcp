@@ -15,7 +15,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | `addin/` | C# Revit 增益集：在 Revit 內啟動本機 HTTP 服務、執行 Revit API；另含 Claude 對話面板 |
 | `addin/installer/` | HTA 安裝精靈與安裝腳本 |
 | `addin/license-tool/` | 授權碼發行工具（ECDSA P-256 簽章，綁 Windows 帳號／電腦／到期日） |
-| `server/` | TypeScript MCP server，提供約 85 個 Revit 工具（查詢、建模、圖紙、匯出、模型 QC、Purge 等） |
+| `server/` | TypeScript MCP server，提供約 170 個 Revit 工具（查詢、建模、圖紙、匯出、模型 QC、Purge 等） |
 
 ## 支援的 AI
 

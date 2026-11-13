@@ -51,11 +51,20 @@ function boot() {
   shell = new ActiveXObject("WScript.Shell");
   TEMP = shell.ExpandEnvironmentStrings("%TEMP%");
   PROG = TEMP + "\\revitmcp_progress.txt";
+  setIcon();
   var dir = htaDir();
   if (!fso.FileExists(dir + "\\install_revitmcp.ps1") || !fso.FolderExists(dir + "\\payload")) {
     document.getElementById("err").innerText = "請先把整個 zip 解壓縮到資料夾，再從資料夾裡執行這個檔案。";
     return;
   }
+}
+
+// IE11 模式下 hta:application 的 icon 屬性無效，改由 set_icon.ps1 在背景把圖示設到視窗上
+function setIcon() {
+  try {
+    if (!fso.FileExists(htaDir() + "\\set_icon.ps1")) return;
+    shell.Run('powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + htaDir() + '\\set_icon.ps1"', 0, false);
+  } catch (e) {}
 }
 
 function htaDir() {
