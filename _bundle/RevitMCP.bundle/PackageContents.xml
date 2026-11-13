@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0" AutodeskProduct="Revit" ProductType="Application"
+  Name="Revit MCP" AppVersion="1.10.2" ProductCode="{35587084-0c62-41c0-8755-1b693eb45147}" UpgradeCode="{dbcb2ee8-2c01-4eb7-8655-706dba95eb4b}"
+  Description="Connect Claude Desktop (MCP) or your own AI API key to Autodesk Revit. Query, model, annotate and export with natural language."
+  Author="Rita (Rirychh)" HelpFile="./Contents/Resources/help.html" OnlineDocumentation="https://github.com/Rirychh/revit-mcp#readme">
+  <CompanyDetails Name="Rita (Rirychh)" Url="https://github.com/Rirychh" Email="" />
+  <Components Description="Revit 2022 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2022" SeriesMax="R2022" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2022/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+  <Components Description="Revit 2023 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2023" SeriesMax="R2023" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2023/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+  <Components Description="Revit 2024 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2024" SeriesMax="R2024" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2024/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+  <Components Description="Revit 2025 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2025" SeriesMax="R2025" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2025/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+  <Components Description="Revit 2026 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2026" SeriesMax="R2026" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2026/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+  <Components Description="Revit 2027 part">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2027" SeriesMax="R2027" />
+    <ComponentEntry AppName="Revit MCP" Version="1.10.2" ModuleName="./Contents/2027/RevitMCP.addin" AppDescription="AI assistant and MCP server for Revit" />
+  </Components>
+</ApplicationPackage>

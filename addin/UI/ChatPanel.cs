@@ -1,4 +1,4 @@
-﻿// Revit MCP — © 2026 Rita (Rirychh)
+// Revit MCP — © 2026 Rita (Rirychh)
 // https://github.com/Rirychh/revit-mcp
 // SPDX-License-Identifier: MIT
 
@@ -21,7 +21,11 @@ namespace RevitMcpAddin.UI
     public class ChatPanel : UserControl, IDockablePaneProvider
     {
         public static readonly DockablePaneId PaneId =
+#if MARKETPLACE
+            new(new Guid("BD5A0E71-00AA-41D5-B925-9D99C089ADC7"));   // Marketplace 版用不同 GUID，可與內部版並存
+#else
             new(new Guid("7E2C1A44-9B3D-4E71-9C2A-1F5B6D0A9E10"));
+#endif
 
         private static readonly string NameFile =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "revit-mcp-username.txt");

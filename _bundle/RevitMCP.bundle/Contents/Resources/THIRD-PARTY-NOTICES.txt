@@ -1,0 +1,39 @@
+Third-party components bundled with Revit MCP
+
+Embedded in revit-mcp-server.exe:
+- Node.js runtime – MIT – https://github.com/nodejs/node/blob/main/LICENSE
+- zod – MIT
+- @modelcontextprotocol/sdk – MIT
+- zod-to-json-schema – ISC
+- ajv – MIT
+- fast-deep-equal – MIT
+- json-schema-traverse – MIT
+- fast-uri – BSD-3-Clause
+- ajv-formats – MIT
+- axios – MIT
+- delayed-stream – MIT
+- combined-stream – MIT
+- form-data – MIT
+- asynckit – MIT
+- es-object-atoms – MIT
+- es-errors – MIT
+- math-intrinsics – MIT
+- gopd – MIT
+- es-define-property – MIT
+- has-symbols – MIT
+- get-proto – MIT
+- function-bind – MIT
+- call-bind-apply-helpers – MIT
+- dunder-proto – MIT
+- hasown – MIT
+- get-intrinsic – MIT
+- has-tostringtag – MIT
+- es-set-tostringtag – MIT
+- proxy-from-env – MIT
+- ms – MIT
+- debug – MIT
+- agent-base – MIT
+- https-proxy-agent – MIT
+- follow-redirects – MIT
+
+Newtonsoft.Json is provided by Revit at runtime and is not redistributed.

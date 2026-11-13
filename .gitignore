@@ -16,3 +16,11 @@ revoked.json
 *.bak
 *.bak_*
 *.bak2*
+_out/
+server/sea/*.exe
+server/sea/*.blob
+server/sea/bundle.cjs
+server/sea/meta.json
+_bundle/RevitMCP.bundle/Contents/20*/
+_bundle/RevitMCP.bundle/Contents/server/
+_bundle/*.zip

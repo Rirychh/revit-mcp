@@ -31,6 +31,9 @@ namespace RevitMcpAddin
                 //    避免兩個入口。（ShowPanelCommand 仍保留，供需要時手動掛按鈕。）
 
                 // 3) 用 Idling 事件在主緒取得 UIApplication 後啟動 HTTP server + 綁定執行器
+                #if MARKETPLACE
+                MarketplaceRibbon.Create(application);
+#endif
                 application.Idling += OnIdling;
 
                 return Result.Succeeded;

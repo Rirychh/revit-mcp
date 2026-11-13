@@ -74,4 +74,7 @@
     <Copy SourceFiles="tools-manifest.json" DestinationFolder="$(RevitMcpTsRepo)"
           SkipUnchangedFiles="true" ContinueOnError="WarnAndContinue" />
   </Target>
+  <PropertyGroup Condition="'$(Marketplace)' == 'true'">
+    <DefineConstants>$(DefineConstants);MARKETPLACE</DefineConstants>
+  </PropertyGroup>
 </Project>
