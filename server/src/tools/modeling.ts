@@ -39,6 +39,44 @@ Args:
     }).strict(), annotations: W,
   }, call("/grids"));
 
+  server.registerTool("revit_align_grids_to_cad", {
+    title: "Align grids to CAD",
+    description: `依平面視圖中的 DWG（連結或匯入）調整直線網格：每條網格找方向差 ≤ maxAngleDeg、垂直距離 ≤ maxOffsetMm 的最近 CAD 直線，旋轉＋平移對齊（網格長度、名稱不變；釘選的網格會暫時解除再釘回）。
+有兩條相近 CAD 線的網格標為 ambiguous、不會動；弧形網格略過。
+apply=false（預設）回報每條網格的旋轉角（度）與偏移（mm）；apply=true 單一交易執行。
+先用 revit_link_cad 把網格 DWG 連進該視圖；layers 填網格圖層關鍵字可避免抓到牆線。`,
+    inputSchema: z.object({
+      viewId: z.number().int().describe("放有 DWG 的平面視圖"),
+      cadName: z.string().optional().describe("DWG 名稱關鍵字"),
+      layers: z.array(z.string()).optional().describe("網格圖層名稱關鍵字，例 [\"GRID\",\"AXIS\"]"),
+      gridNames: z.array(z.string()).optional().describe("只處理這些網格；省略=全部"),
+      maxAngleDeg: z.number().default(5),
+      maxOffsetMm: z.number().default(5000),
+      minLengthMm: z.number().default(3000),
+      apply: z.boolean().default(false),
+    }).strict(), annotations: W,
+  }, call("/grids/align-to-cad"));
+
+  server.registerTool("revit_create_floor_from_walls", {
+    title: "Create floor from walls",
+    description: `用一組牆圍出的區域建樓板（例：連續壁內建筏基）。牆可以交叉、T 接、有短缺口，不必首尾相接；弧牆保留弧線。
+做法：定位線求交切段 → 懸空端點在 gapToleranceMm 內接到最近的線 → 剪掉懸空段 → 取外輪廓（boundary=outer）或最大單一區（largest）。
+牆用 elementIds，或 useSelection=true 取 Revit 目前選取。face：location（預設，用牆定位線）| inner | outer（再偏移半個牆厚）。
+apply=false（預設）回報讀到／沒讀到的牆、用到的牆、面積、周長；不閉合時列懸空端點。apply=true 單一交易建立。`,
+    inputSchema: z.object({
+      elementIds: z.array(z.number().int()).optional(),
+      useSelection: z.boolean().default(false),
+      levelName: z.string().min(1),
+      heightOffsetMm: z.number().default(0).describe("樓板頂面相對樓層的偏移"),
+      floorTypeName: z.string().optional(),
+      face: z.enum(["location", "inner", "outer"]).default("location"),
+      boundary: z.enum(["outer", "largest"]).default("outer"),
+      gapToleranceMm: z.number().default(1500),
+      structural: z.boolean().default(false),
+      apply: z.boolean().default(false),
+    }).strict(), annotations: W,
+  }, call("/floors/from-walls"));
+
   server.registerTool("revit_create_structural_framing", {
     title: "Create structural framing (beams)",
     description: `建立結構梁：每支由 start、end 兩點（mm）定義。模型裡要先有結構框架族群（沒有就先用 revit_load_families）。

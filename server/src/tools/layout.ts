@@ -114,7 +114,7 @@ export function registerLayoutTools(server: McpServer): void {
 
   server.registerTool("revit_cad_extract", {
     title: "Cad extract",
-    description: "萃取平面視圖中 DWG（連結或匯入）的幾何，存成這次 Revit 工作階段的快取（最多 5 份），不改模型：\n線段、封閉聚合線、首尾相接的線段串成的封閉迴圈（chainLines）、整圓。回傳 cacheId、各圖層的線段／封閉迴圈／矩形／圓數量與範圍。\n可用 layers（圖層名關鍵字）與 regionMm（[minX,minY,maxX,maxY]，模型座標 mm）縮小範圍。\n接著用 revit_cad_generate_bim 依快取產生柱或樓板。",
+    description: "萃取平面視圖中 DWG（連結或匯入）的幾何，存成這次 Revit 工作階段的快取（最多 5 份），不改模型：\n線段、封閉聚合線、首尾相接的線段串成的封閉迴圈（chainLines）、整圓。回傳 cacheId、各圖層的線段／封閉迴圈／矩形／圓數量與範圍。\n可用 layers（圖層名關鍵字）與 regionMm（[minX,minY,maxX,maxY]，模型座標 mm）縮小範圍。\n接著用 revit_cad_generate_bim 依快取產生柱或樓板；牆請用 revit_cad_wall_diff。",
     inputSchema: z.object({
       "viewId": z.number().int().describe("放有 DWG 的平面視圖"),
       "cadName": z.string().describe("DWG 名稱關鍵字（視圖裡有多個 DWG 時）").optional(),

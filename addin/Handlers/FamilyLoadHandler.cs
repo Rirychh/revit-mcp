@@ -22,16 +22,6 @@ namespace RevitMcpAddin.Handlers
         private readonly Document _doc;
         public FamilyLoadHandler(Document doc) => _doc = doc;
 
-        private class LoadOpts : IFamilyLoadOptions
-        {
-            private readonly bool _overwrite;
-            public LoadOpts(bool overwrite) => _overwrite = overwrite;
-            public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues)
-            { overwriteParameterValues = _overwrite; return _overwrite; }
-            public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues)
-            { source = FamilySource.Family; overwriteParameterValues = _overwrite; return _overwrite; }
-        }
-
         // POST /families/load  { paths:["D:\\族群\\H型鋼梁.rfa"], folder?:"D:\\族群", overwrite:false, apply }
         public string Load(string body)
         {
@@ -71,7 +61,7 @@ namespace RevitMcpAddin.Handlers
             {
                 foreach (var p in todo)
                 {
-                    bool ok = _doc.LoadFamily(p, new LoadOpts(overwrite), out Family fam);
+                    bool ok = _doc.LoadFamily(p, (overwrite ? FamilyLoad.Overwrite : FamilyLoad.SkipExisting), out Family fam);
                     if (ok) loadedCount++;
                     results.Add(new
                     {

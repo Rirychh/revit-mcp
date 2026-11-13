@@ -88,11 +88,58 @@ Opening never closes or saves any other open document. Large models can take a f
   server.registerTool("revit_list_design_options", {
     title: "List Design Options",
     description: `List design option sets and their options in a document: ids, names, which is primary, which is the ACTIVE option, and how many model elements each option (and the main model) holds.
-Revit's API cannot create option sets/options, switch the active option, or move elements between options; those are UI-only. Elements created through revit_* tools land in the currently active option.`,
+Revit's API cannot create option sets/options, or switch the active option; those are UI-only. To move elements into the active option use revit_move_to_design_option. Elements created through revit_* tools land in the currently active option.`,
     inputSchema: z.object({ document: docArg }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ document }) => {
     try { return txt(await revitRequest("get", "/design-options", { document })); } catch (e) { return err(e); }
+  });
+
+  server.registerTool("revit_move_to_design_option", {
+    title: "Move Elements Into Active Design Option",
+    description: `Move model elements into the design option that is currently ACTIVE (the user switches it in Revit's status-bar Design Options dropdown; the API cannot).
+Works like the UI "Add to Set": copies each element in place (copies land in the active option), then deletes the originals, in one transaction that rolls back on any error.
+Element ids change; tags/dimensions hosted on the originals are deleted with them. Grids, levels, reference planes, view-specific elements (detail lines, annotations), pinned and grouped elements are skipped with a reason.
+apply=false (default) reports target option, count to move, skips and how many tags/dimensions would be lost. Check the active option with revit_list_design_options first.`,
+    inputSchema: z.object({
+      document: docArg,
+      elementIds: z.array(z.number().int()).min(1).max(5000),
+      apply: z.boolean().default(false).describe("false=預檢(不改模型),true=執行"),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async (a) => {
+    try { return txt(await revitRequest("post", "/design-options/move", undefined, a, LONG)); } catch (e) { return err(e); }
+  });
+
+  server.registerTool("revit_add_to_design_option", {
+    title: "Add Elements To Design Option (native Add to Set)",
+    description: `Put model elements into a design option with Revit's own "Manage > Design Options > Add to Set" command — no need to switch the active option first.
+Selects the elements, posts the command, then (when optionName is given) ticks only that option in the dialog via UI Automation and presses OK. If the dialog can't be handled unambiguously it is left open for the user.
+Grids/levels/reference planes, view-specific and grouped elements are skipped with a reason. apply=false (default) only reports what would be added.
+Afterwards check with revit_list_design_options. Prefer this over revit_move_to_design_option.`,
+    inputSchema: z.object({
+      document: docArg,
+      elementIds: z.array(z.number().int()).min(1).max(5000),
+      optionName: z.string().optional().describe("目標選項名稱（例：結構）；省略=對話框留給使用者勾選"),
+      apply: z.boolean().default(false).describe("false=預檢(不改模型),true=執行"),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ optionName, ...a }) => {
+    try {
+      const r: any = await revitRequest("post", "/design-options/add-to-set", undefined, a, LONG);
+      if (!a.apply || !optionName) return txt(r);
+      const pid = r?.data?.pid ?? r?.pid;
+      if (!pid) return txt({ revit: r, dialog: "拿不到 Revit pid，對話框請手動處理" });
+      const { execFile } = await import("node:child_process");
+      const { fileURLToPath } = await import("node:url");
+      const path = await import("node:path");
+      const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../scripts/add-to-set-dialog.ps1");
+      const dialog = await new Promise<string>((res) =>
+        execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-RevitPid", String(pid), "-Option", optionName],
+          { timeout: 40_000, windowsHide: true }, (e, so, se) => res((so || "").trim() || (e ? `error: ${e.message} ${se}` : ""))));
+      let parsed: unknown = dialog; try { parsed = JSON.parse(dialog); } catch { }
+      return txt({ revit: r, dialog: parsed });
+    } catch (e) { return err(e); }
   });
 
   server.registerTool("revit_select_elements", {
@@ -107,6 +154,56 @@ Use before a UI-only command such as Manage > Design Options > Add to Set.`,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (a) => {
     try { return txt(await revitRequest("post", "/selection", undefined, a, LONG)); } catch (e) { return err(e); }
+  });
+
+  server.registerTool("revit_select_category", {
+    title: "Select All Of A Category",
+    description: `Select every element of one or more categories in the ACTIVE document — whole project, or only what is visible in one view — optionally limited to one level.
+Typical use: select all structural columns, then the user runs Manage > Design Options > Add to Set (UI-only; the API cannot move elements into an option).
+Elements already in a design option are skipped by default (excludeInOptions).
+apply=false (default) only reports the count per level; apply=true makes the selection in the Revit window.`,
+    inputSchema: z.object({
+      categories: z.array(z.string()).min(1).describe("OST_ names (OST_StructuralColumns) or display names (結構柱)"),
+      viewId: z.number().int().optional().describe("Only elements visible in this view; omit = whole project"),
+      levelName: z.string().optional(),
+      excludeInOptions: z.boolean().default(true),
+      zoom: z.boolean().default(false),
+      apply: z.boolean().default(false),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (a) => {
+    try { return txt(await revitRequest("post", "/selection/category", undefined, a, LONG)); } catch (e) { return err(e); }
+  });
+
+  server.registerTool("revit_cad_wall_diff", {
+    title: "Compare CAD Walls With Revit Walls (and build missing ones)",
+    description: `Compare the wall lines of a DWG linked/imported into a plan view with the Revit walls visible in that view.
+Reads the CAD geometry straight from Revit (already in model coordinates — no DXF export, no alignment), keeps layers whose name contains one of 'layers' (default ["WALL"]), pairs parallel double lines into centerlines + thickness, then reports:
+  - newWalls: CAD walls with no visible Revit wall within matchTolMm (CAD has it, Revit doesn't)
+  - obsoleteWalls: visible Revit walls with < 30% of their length near CAD wall lines (Revit has it, CAD doesn't)
+  - partialWalls: Revit walls 30–85% covered, with the uncovered stretches (often a door opening — check before trimming)
+Only walls VISIBLE in the view are considered, so walls hidden on purpose are never listed.
+apply=false (default) changes nothing. apply=true creates the newWalls on the view's level: wallTypeName if given, otherwise the basic wall type whose width is closest to each CAD thickness; height = heightMm or the median height of this level's visible walls.
+It never deletes anything — confirm obsoleteWalls with the user, then use revit_delete_elements.
+Use region (mm) to work one zone at a time on big floors.`,
+    inputSchema: z.object({
+      viewId: z.number().int().describe("Plan view that shows the DWG (the DWG may be view-specific)"),
+      cadName: z.string().optional().describe("Substring of the DWG name; omit = every DWG in the view"),
+      layers: z.array(z.string()).optional().describe("Layer-name keywords, default [\"WALL\"]"),
+      region: z.object({ minX: z.number(), minY: z.number(), maxX: z.number(), maxY: z.number() }).optional(),
+      minThicknessMm: z.number().default(70),
+      maxThicknessMm: z.number().default(650),
+      angleTolDeg: z.number().default(1.0),
+      matchTolMm: z.number().default(300),
+      minLengthMm: z.number().default(300),
+      maxResults: z.number().int().default(200),
+      apply: z.boolean().default(false),
+      wallTypeName: z.string().optional(),
+      heightMm: z.number().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (a) => {
+    try { return txt(await revitRequest("post", "/cad/wall-diff", undefined, a, LONG)); } catch (e) { return err(e); }
   });
 
   server.registerTool("revit_mass_boxes", {

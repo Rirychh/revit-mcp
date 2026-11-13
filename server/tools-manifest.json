@@ -3,8 +3,8 @@
   "title": "Revit MCP tool manifest — single source of truth",
   "authority": "RevitHttpServer.Route() in RevitHttpServer.cs is the authoritative capability list. Every arm of that routing table has exactly one entry in tools[]. If you add a route, add an entry here in the same commit.",
   "naming": "Tool names follow the TypeScript MCP server (revit-mcp/src/tools/*.ts), because those are the names the user already calls from Claude Desktop. Where a route had no TS tool, a new name was coined in the same revit_<verb>_<noun> style.",
-  "routeArmCount": 119,
-  "toolCount": 119,
+  "routeArmCount": 170,
+  "toolCount": 170,
   "consumers": {
     "panel": "RevitMcpAddin Ai/RevitTools.cs — the Claude chat panel inside the Revit window. Loads this file as an embedded resource and generates its Anthropic tool definitions from it. Calls RevitHttpServer.Route() directly (in-process, via RevitApiExecutor/ExternalEvent) — it never goes over HTTP, so no token is involved.",
     "mcp": "revit-mcp/src/index.ts — the Node MCP server for Claude Desktop. Goes over authenticated HTTP. NOT yet generated from this manifest; see tsCoverage on each entry."
@@ -1529,6 +1529,82 @@
       }
     },
     {
+      "name": "revit_create_floor_from_walls",
+      "method": "POST",
+      "route": "/floors/from-walls",
+      "summary": "用一組牆圍出的區域建樓板：牆可交叉、T 接或有短缺口，弧牆保留弧線；可取外輪廓或最大單一區，邊界用定位線或牆內外側。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_floor_from_walls",
+      "tsCoverage": "covered",
+      "notes": "不閉合時預檢會列出懸空端點。",
+      "source": "added v1.10.4",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "useSelection": {
+            "type": "boolean",
+            "default": false
+          },
+          "levelName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "heightOffsetMm": {
+            "type": "number",
+            "default": 0,
+            "description": "樓板頂面相對樓層的偏移"
+          },
+          "floorTypeName": {
+            "type": "string"
+          },
+          "face": {
+            "type": "string",
+            "enum": [
+              "location",
+              "inner",
+              "outer"
+            ],
+            "default": "location"
+          },
+          "boundary": {
+            "type": "string",
+            "enum": [
+              "outer",
+              "largest"
+            ],
+            "default": "outer"
+          },
+          "gapToleranceMm": {
+            "type": "number",
+            "default": 1500
+          },
+          "structural": {
+            "type": "boolean",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "levelName"
+        ]
+      }
+    },
+    {
       "name": "revit_create_columns",
       "method": "POST",
       "route": "/columns",
@@ -1661,7 +1737,7 @@
       "pathParams": [],
       "tsTool": "revit_create_room_views",
       "tsCoverage": "covered",
-      "notes": "空 body 會丟錯，至少送 {}。planName/elevName 支援 {room}、{name}、{level} 代換。",
+      "notes": "空 body 會丟錯，至少送 {}。planName/elevName 支援 {room}、{name}、{level} 代換。 2026-11-04：可讀連結模型房間（includeLinks）、指定視圖類型、沿用既有平面圖當立面宿主（hostPlanViewId + createPlan=false）。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1739,6 +1815,28 @@
           "elevAngleDeg": {
             "type": "number",
             "description": "直接指定立面角度（度），覆寫 alignElevToRoom"
+          },
+          "includeLinks": {
+            "type": "boolean",
+            "default": true,
+            "description": "也搜尋 Revit 連結模型裡的房間（座標自動轉成主模型座標）"
+          },
+          "createPlan": {
+            "type": "boolean",
+            "default": true,
+            "description": "是否另建平面放大圖"
+          },
+          "hostPlanViewId": {
+            "type": "integer",
+            "description": "立面標記要放在哪張既有平面圖上；createPlan=false 時必填"
+          },
+          "planTypeName": {
+            "type": "string",
+            "description": "平面視圖類型名稱（可部分比對）"
+          },
+          "elevTypeName": {
+            "type": "string",
+            "description": "立面視圖類型名稱（可部分比對），如「建築立面 1/30-廁所立面」"
           }
         }
       },
@@ -2740,6 +2838,60 @@
         "required": [
           "viewIds",
           "categories"
+        ]
+      }
+    },
+    {
+      "name": "revit_show_grids_3d",
+      "method": "POST",
+      "route": "/views/grids3d",
+      "summary": "設定 3D 視圖的「顯示柱線」（Show Grids）：柱線畫在哪些樓層平面上。只有與樓層平面相交的柱線會顯示；此設定不屬於視圖樣板。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_show_grids_3d",
+      "tsCoverage": "covered",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "description": "目標 3D 視圖 ElementId"
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "樓層名稱（或 id 字串）（mode=clear 時可省略）"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "set",
+              "add",
+              "remove",
+              "clear"
+            ],
+            "default": "set",
+            "description": "set＝取代為指定樓層；add＝加入；remove＝移除；clear＝全部關閉"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢，true＝寫入模型"
+          }
+        },
+        "required": [
+          "viewIds"
         ]
       }
     },
@@ -3978,6 +4130,94 @@
       }
     },
     {
+      "name": "revit_move_to_design_option",
+      "method": "POST",
+      "route": "/design-options/move",
+      "summary": "把模型元件移進目前作用中的設計選項：原地複製（複本落在作用中選項）後刪除原件，單一交易，任何錯誤整批回滾。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_move_to_design_option",
+      "tsCoverage": "covered",
+      "notes": "作用中選項只能在 Revit 狀態列切換，API 無法切換；元件 id 會改變，附在原件上的標籤與尺寸會一起刪除；基準元素、視圖專屬元素、釘選與群組內元件會跳過並說明原因。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "文件名或路徑關鍵字；省略＝作用中文件"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "maxItems": 5000,
+            "description": "要移進作用中設計選項的元件 ElementId"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false=預檢(不改模型),true=執行"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_add_to_design_option",
+      "method": "POST",
+      "route": "/design-options/add-to-set",
+      "summary": "用 Revit 原生「新增至集合」把元件放進設計選項，不必先切換作用中選項；給 optionName 時自動在對話框只勾該選項並按確定。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_to_design_option",
+      "tsCoverage": "covered",
+      "notes": "對話框以 UI Automation 操作；無法唯一判斷時留給使用者。基準元素、視圖專屬與群組內元件會跳過並說明原因。",
+      "source": "added v1.10.4",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Target document: title or part of its path. Omit = active document"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "optionName": {
+            "type": "string",
+            "description": "目標選項名稱（例：結構）；省略=對話框留給使用者勾選"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false=預檢(不改模型),true=執行"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
       "name": "revit_select_elements",
       "method": "POST",
       "route": "/selection",
@@ -4012,6 +4252,85 @@
         },
         "required": [
           "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_select_category",
+      "method": "POST",
+      "route": "/selection/category",
+      "summary": "把某品類的元件全部選起來（整個專案或某視圖內，可限定樓層），給「設計選項 → 新增至集合」等 UI 指令接手。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_select_category",
+      "tsCoverage": "covered",
+      "notes": "只改 UI 選取狀態，不改模型。apply=false 只回報各樓層數量。已在設計選項內的元件預設略過。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "OST_ 名稱（OST_StructuralColumns）或顯示名稱（結構柱）"
+          },
+          "viewId": { "type": "integer", "description": "只選這張視圖看得到的；省略 = 整個專案" },
+          "levelName": { "type": "string", "description": "限定樓層" },
+          "excludeInOptions": { "type": "boolean", "default": true, "description": "略過已在設計選項內的元件" },
+          "zoom": { "type": "boolean", "default": false },
+          "apply": { "type": "boolean", "default": false, "description": "true 才真的選取" }
+        },
+        "required": [
+          "categories"
+        ]
+      }
+    },
+    {
+      "name": "revit_cad_wall_diff",
+      "method": "POST",
+      "route": "/cad/wall-diff",
+      "summary": "視圖中 DWG 牆線與 Revit 可見牆比對：列出 CAD 有 Revit 沒有（newWalls）、Revit 有 CAD 沒有（obsoleteWalls／partialWalls）；apply=true 依 newWalls 建牆。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_cad_wall_diff",
+      "tsCoverage": "covered",
+      "notes": "直接讀 ImportInstance 幾何（模型座標，免配準）；依圖層關鍵字篩線、雙線配對成中心線。只比對視圖中可見的牆。不刪除任何元件，過時清單須使用者確認後再用 revit_delete_elements。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": { "type": "integer", "description": "放有 DWG 的平面視圖" },
+          "cadName": { "type": "string", "description": "DWG 名稱關鍵字；省略 = 視圖內全部 DWG" },
+          "layers": { "type": "array", "items": { "type": "string" }, "description": "圖層名稱關鍵字，預設 [\"WALL\"]" },
+          "region": {
+            "type": "object",
+            "properties": {
+              "minX": { "type": "number" }, "minY": { "type": "number" },
+              "maxX": { "type": "number" }, "maxY": { "type": "number" }
+            },
+            "description": "只處理這個範圍（mm）"
+          },
+          "minThicknessMm": { "type": "number", "default": 70 },
+          "maxThicknessMm": { "type": "number", "default": 650 },
+          "angleTolDeg": { "type": "number", "default": 1.0 },
+          "matchTolMm": { "type": "number", "default": 300 },
+          "minLengthMm": { "type": "number", "default": 300 },
+          "maxResults": { "type": "integer", "default": 200 },
+          "apply": { "type": "boolean", "default": false, "description": "true 才建牆" },
+          "wallTypeName": { "type": "string", "description": "指定牆類型；省略 = 依厚度配最接近的基本牆" },
+          "heightMm": { "type": "number", "description": "牆高；省略 = 同層可見牆高中位數" }
+        },
+        "required": [
+          "viewId"
         ]
       }
     },
@@ -5226,6 +5545,69 @@
         },
         "required": [
           "grids"
+        ]
+      }
+    },
+    {
+      "name": "revit_align_grids_to_cad",
+      "method": "POST",
+      "route": "/grids/align-to-cad",
+      "summary": "依平面視圖中的 DWG 直線調整直線網格（旋轉＋平移，長度與名稱不變）；兩條相近 CAD 線時標為 ambiguous 不動，弧形網格略過。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_align_grids_to_cad",
+      "tsCoverage": "covered",
+      "notes": "釘選的網格會暫時解除再釘回；layers 填網格圖層關鍵字可避免抓到牆線。",
+      "source": "added v1.10.4",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "放有 DWG 的平面視圖"
+          },
+          "cadName": {
+            "type": "string",
+            "description": "DWG 名稱關鍵字"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "網格圖層名稱關鍵字，例 [\"GRID\",\"AXIS\"]"
+          },
+          "gridNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只處理這些網格；省略=全部"
+          },
+          "maxAngleDeg": {
+            "type": "number",
+            "default": 5
+          },
+          "maxOffsetMm": {
+            "type": "number",
+            "default": 5000
+          },
+          "minLengthMm": {
+            "type": "number",
+            "default": 3000
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "viewId"
         ]
       }
     },
@@ -6707,6 +7089,2919 @@
           }
         },
         "required": []
+      }
+    },
+    {
+      "name": "revit_move_elements",
+      "method": "POST",
+      "route": "/elements/move",
+      "summary": "依向量移動元件（mm），可一次多個。釘選或在群組內的會跳過並說明。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_move_elements",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id",
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "deltaMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "位移 [dx, dy, dz]（mm，模型座標；dz 可省略）",
+            "minItems": 2,
+            "maxItems": 3
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "elementIds",
+          "deltaMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_pin_elements",
+      "method": "POST",
+      "route": "/elements/pin",
+      "summary": "釘選或解除釘選元件（模型元件、CAD／Revit 連結、網格、樓層等）；已是目標狀態的跳過。apply=false 預檢，單一交易，任何錯誤整批回滾。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_pin_elements",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "added v1.10.4 so pinned links/elements can be moved or deleted via MCP",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id",
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "pinned": {
+            "type": "boolean",
+            "default": false,
+            "description": "true＝釘選，false＝解除釘選"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "elementIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_array_elements",
+      "method": "POST",
+      "route": "/elements/array",
+      "summary": "照向量複製元件，count>1 為線性陣列（第 i 份位移 delta×i）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_array_elements",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id",
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "deltaMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "位移 [dx, dy, dz]（mm，模型座標；dz 可省略）",
+            "minItems": 2,
+            "maxItems": 3
+          },
+          "count": {
+            "type": "integer",
+            "description": "複製幾份",
+            "default": 1
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "elementIds",
+          "deltaMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_change_type",
+      "method": "POST",
+      "route": "/elements/change-type",
+      "summary": "把元件換成同族群或同品類的其他類型（例如牆換牆類型、門換門類型）。apply=false 預檢並列出可換的類型。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_change_type",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id",
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "typeName": {
+            "type": "string",
+            "description": "目標類型：「族群: 類型」、類型名或類型 id"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "elementIds",
+          "typeName"
+        ]
+      }
+    },
+    {
+      "name": "revit_duplicate_type",
+      "method": "POST",
+      "route": "/types/duplicate",
+      "summary": "複製出新類型（例如新的牆類型），可設定總厚度（牆、樓板、屋頂、天花）與類型參數。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_duplicate_type",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sourceType": {
+            "type": "string",
+            "description": "來源類型：「族群: 類型」、類型名或類型 id"
+          },
+          "newName": {
+            "type": "string",
+            "description": "新類型名稱"
+          },
+          "thicknessMm": {
+            "type": "number",
+            "description": "總厚度（mm，只限有複合結構的類型）"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "integer",
+                "boolean"
+              ]
+            },
+            "description": "類型參數 {名稱: 值}"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "sourceType",
+          "newName"
+        ]
+      }
+    },
+    {
+      "name": "revit_join_geometry",
+      "method": "POST",
+      "route": "/geometry/join",
+      "summary": "接合／取消接合／切換接合順序（例如牆與樓板、柱與梁）；也可給一批元件，自動接合彼此相交的組合。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_join_geometry",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pairs": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "[a, b]",
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "元件組合"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "一批元件，自動找相交的組合"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "join",
+              "unjoin",
+              "switch"
+            ],
+            "description": "動作",
+            "default": "join"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_place_doors_windows",
+      "method": "POST",
+      "route": "/hosted/place",
+      "summary": "把門窗放進牆：給點位會自動找最近的直牆並投影到牆中心線，可設窗台高、翻轉。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_place_doors_windows",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "familyType": {
+            "type": "string",
+            "description": "門或窗的「族群: 類型」"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pointMm": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "[x, y]（mm）",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "wallId": {
+                  "type": "integer",
+                  "description": "指定牆（省略自動找最近的）"
+                },
+                "sillHeightMm": {
+                  "type": "number",
+                  "description": "窗台高（mm）"
+                },
+                "flipFacing": {
+                  "type": "boolean",
+                  "description": "翻轉內外"
+                },
+                "flipHand": {
+                  "type": "boolean",
+                  "description": "翻轉左右"
+                }
+              },
+              "required": [
+                "pointMm"
+              ]
+            },
+            "description": "要放的位置",
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "level": {
+            "type": "string",
+            "description": "樓層（通常不用給，沿用牆的樓層）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "familyType",
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_ceilings",
+      "method": "POST",
+      "route": "/ceilings",
+      "summary": "建立天花板：依房間（以房間完成面邊界）或指定迴圈，可設離地高度。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_ceilings",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "roomIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "依這些房間的邊界建立"
+          },
+          "loops": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "description": "[x, y]（mm）",
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "封閉折線的頂點 [[x,y],...]（mm，不需重複起點）",
+              "minItems": 3
+            },
+            "description": "封閉折線（mm）"
+          },
+          "level": {
+            "type": "string",
+            "description": "loops 用的樓層名稱"
+          },
+          "ceilingType": {
+            "type": "string",
+            "description": "天花類型（省略取第一個）"
+          },
+          "heightMm": {
+            "type": "number",
+            "description": "離樓層高度（mm）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_create_roof",
+      "method": "POST",
+      "route": "/roofs",
+      "summary": "依跡線建立屋頂，可設坡度（每條邊都定義坡度，形成四坡）與基準偏移。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_roof",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pointsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y]（mm）",
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "封閉折線的頂點 [[x,y],...]（mm，不需重複起點）",
+            "minItems": 3
+          },
+          "level": {
+            "type": "string",
+            "description": "屋頂所在樓層名稱"
+          },
+          "roofType": {
+            "type": "string",
+            "description": "屋頂類型（省略取第一個）"
+          },
+          "baseOffsetMm": {
+            "type": "number",
+            "description": "基準偏移（mm）"
+          },
+          "slopeDeg": {
+            "type": "number",
+            "description": "坡度（度），0＝平屋頂",
+            "default": 0
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "pointsMm",
+          "level"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_opening",
+      "method": "POST",
+      "route": "/openings",
+      "summary": "建立開口：牆上矩形開口、跨樓層豎井、樓板／屋頂／天花上的開口。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_opening",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 1 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "wall",
+              "shaft",
+              "floor"
+            ],
+            "description": "開口種類"
+          },
+          "wallId": {
+            "type": "integer",
+            "description": "wall：牆 id"
+          },
+          "alongMm": {
+            "type": "number",
+            "description": "wall：離牆起點距離（mm）"
+          },
+          "widthMm": {
+            "type": "number",
+            "description": "wall：寬（mm）"
+          },
+          "sillMm": {
+            "type": "number",
+            "description": "wall：離牆底高（mm）",
+            "default": 0
+          },
+          "heightMm": {
+            "type": "number",
+            "description": "wall：高（mm）"
+          },
+          "pointsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y]（mm）",
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "封閉折線的頂點 [[x,y],...]（mm，不需重複起點）",
+            "minItems": 3
+          },
+          "bottomLevel": {
+            "type": "string",
+            "description": "shaft：底部樓層"
+          },
+          "topLevel": {
+            "type": "string",
+            "description": "shaft：頂部樓層"
+          },
+          "hostId": {
+            "type": "integer",
+            "description": "floor：樓板／屋頂／天花 id"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_view_range",
+      "method": "POST",
+      "route": "/views/range",
+      "summary": "讀取或設定平面視圖的視圖範圍（頂部、剖切面、底部、視圖深度，相對所屬樓層的偏移 mm）。apply=false 先回報目前值。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_view_range",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "視圖 id（也可以是視圖樣板 id）",
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "cutMm": {
+            "type": "number",
+            "description": "剖切面偏移（mm）"
+          },
+          "topMm": {
+            "type": "number",
+            "description": "頂部偏移（mm）"
+          },
+          "bottomMm": {
+            "type": "number",
+            "description": "底部偏移（mm）"
+          },
+          "depthMm": {
+            "type": "number",
+            "description": "視圖深度偏移（mm）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_view_display",
+      "method": "POST",
+      "route": "/views/display",
+      "summary": "設定視圖的詳細等級、視覺樣式、專業、範圍框（可一次多張）。apply=false 先回報目前值。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_view_display",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "視圖 id（也可以是視圖樣板 id）",
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "detailLevel": {
+            "type": "string",
+            "enum": [
+              "coarse",
+              "medium",
+              "fine"
+            ],
+            "description": "詳細等級"
+          },
+          "displayStyle": {
+            "type": "string",
+            "enum": [
+              "wireframe",
+              "hiddenLine",
+              "shaded",
+              "shadedWithEdges",
+              "consistentColors",
+              "realistic"
+            ],
+            "description": "視覺樣式"
+          },
+          "discipline": {
+            "type": "string",
+            "enum": [
+              "architectural",
+              "structural",
+              "mechanical",
+              "electrical",
+              "plumbing",
+              "coordination"
+            ],
+            "description": "專業"
+          },
+          "scopeBox": {
+            "type": "string",
+            "description": "範圍框名稱；\"none\" 取消"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewIds"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_view_filter",
+      "method": "POST",
+      "route": "/views/filters",
+      "summary": "建立視圖篩選器（品類＋參數條件）並套到視圖，可設可見性、顏色、半色調、線寬；同名篩選器會直接沿用。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_view_filter",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "篩選器名稱"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "品類（例如 Walls、Doors、Rooms）",
+            "minItems": 1
+          },
+          "parameter": {
+            "type": "string",
+            "description": "參數名稱"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "equals",
+              "notEquals",
+              "contains",
+              "notContains",
+              "beginsWith",
+              "greater",
+              "greaterOrEqual",
+              "less",
+              "lessOrEqual"
+            ],
+            "description": "條件",
+            "default": "equals"
+          },
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "integer"
+            ],
+            "description": "比較值"
+          },
+          "valueUnit": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mm",
+              "m2",
+              "m3"
+            ],
+            "description": "數值單位",
+            "default": "none"
+          },
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "要套用的視圖或視圖樣板"
+          },
+          "visible": {
+            "type": "boolean",
+            "description": "符合的元件是否顯示",
+            "default": true
+          },
+          "colorRgb": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "[r, g, b]",
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "halftone": {
+            "type": "boolean",
+            "description": "半色調"
+          },
+          "lineWeight": {
+            "type": "integer",
+            "description": "投影線寬 1–16"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "name",
+          "categories"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_view_template",
+      "method": "POST",
+      "route": "/views/template-from-view",
+      "summary": "從現有視圖建立視圖樣板（等同「從目前視圖建立樣板」）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_view_template",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "來源視圖"
+          },
+          "name": {
+            "type": "string",
+            "description": "樣板名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_visibility",
+      "method": "POST",
+      "route": "/views/visibility",
+      "summary": "暫時隔離／隱藏元件或品類、重設暫時隱藏；或永久隱藏／取消隱藏元件。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_visibility",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "isolate",
+              "hide",
+              "isolateCategories",
+              "hideCategories",
+              "resetTemporary",
+              "hidePermanent",
+              "unhidePermanent"
+            ],
+            "description": "動作"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "品類"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_section_box",
+      "method": "POST",
+      "route": "/views/section-box",
+      "summary": "設定 3D 視圖剖面框：框住指定元件（外擴 marginMm）或指定範圍，也可關閉。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_section_box",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "3D 視圖 id"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "框住這些元件"
+          },
+          "minMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x,y,z]",
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "maxMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x,y,z]",
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "marginMm": {
+            "type": "number",
+            "description": "外擴（mm）",
+            "default": 500
+          },
+          "off": {
+            "type": "boolean",
+            "description": "關閉剖面框",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_elevations",
+      "method": "POST",
+      "route": "/views/elevations",
+      "summary": "在平面放一個立面標記，建立指定方向的立面視圖（north＝北向立面，看北側外牆）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_elevations",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "planViewId": {
+            "type": "integer",
+            "description": "放標記的平面視圖"
+          },
+          "pointMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y]（mm）",
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "faces": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "north",
+                "east",
+                "south",
+                "west"
+              ]
+            },
+            "description": "立面方向"
+          },
+          "scale": {
+            "type": "integer",
+            "description": "比例分母",
+            "default": 100
+          },
+          "namePrefix": {
+            "type": "string",
+            "description": "視圖名稱前綴"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "planViewId",
+          "pointMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_callout",
+      "method": "POST",
+      "route": "/views/callout",
+      "summary": "在平面、剖面或立面上框一塊建立詳圖索引視圖（可命名、設比例）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_callout",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "parentViewId": {
+            "type": "integer",
+            "description": "母視圖 id"
+          },
+          "rectUv": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[u0, v0, u1, v1]（視圖平面座標 mm）",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "name": {
+            "type": "string",
+            "description": "視圖名稱"
+          },
+          "scale": {
+            "type": "integer",
+            "description": "比例分母"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "parentViewId",
+          "rectUv"
+        ]
+      }
+    },
+    {
+      "name": "revit_add_text_notes",
+      "method": "POST",
+      "route": "/annotations/text",
+      "summary": "在任何 2D 視圖或圖紙上放文字註記（可指定文字類型與換行寬度）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_text_notes",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖或圖紙 id"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "文字"
+                },
+                "pointUv": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "視圖平面座標 [u, v]（mm）：u＝視圖右方、v＝視圖上方；平面視圖等於模型 X、Y；圖紙上是圖紙 mm",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "widthMm": {
+                  "type": "number",
+                  "description": "換行寬度（圖紙 mm）"
+                }
+              },
+              "required": [
+                "text",
+                "pointUv"
+              ]
+            },
+            "description": "文字",
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "textType": {
+            "type": "string",
+            "description": "文字類型"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "notes"
+        ]
+      }
+    },
+    {
+      "name": "revit_add_spot_elevations",
+      "method": "POST",
+      "route": "/annotations/spot-elevations",
+      "summary": "在樓板、屋頂、天花等主體的頂面放高程點（可指定點位，否則取中心）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_spot_elevations",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "平面、剖面或立面視圖"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "type": "integer"
+                },
+                "pointMm": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "[x, y]（mm）",
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "elementId"
+              ]
+            },
+            "description": "要標的元件",
+            "minItems": 1
+          },
+          "hasLeader": {
+            "type": "boolean",
+            "description": "帶引線",
+            "default": true
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "revit_add_filled_regions",
+      "method": "POST",
+      "route": "/annotations/filled-regions",
+      "summary": "在 2D 視圖畫填滿區域（例如材料圖例、範圍示意），可指定填滿區域類型。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_filled_regions",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "description": "[u, v]",
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "封閉折線 [[u,v],...]（視圖平面座標 mm）",
+              "minItems": 3
+            },
+            "description": "區域",
+            "minItems": 1
+          },
+          "regionType": {
+            "type": "string",
+            "description": "填滿區域類型"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "regions"
+        ]
+      }
+    },
+    {
+      "name": "revit_place_detail_components",
+      "method": "POST",
+      "route": "/annotations/detail-components",
+      "summary": "在 2D 視圖放詳圖元件（可旋轉）；族群需先載入。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_place_detail_components",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "視圖 id"
+          },
+          "familyType": {
+            "type": "string",
+            "description": "詳圖元件「族群: 類型」"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pointUv": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "視圖平面座標 [u, v]（mm）：u＝視圖右方、v＝視圖上方；平面視圖等於模型 X、Y；圖紙上是圖紙 mm",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "rotationDeg": {
+                  "type": "number",
+                  "description": "旋轉角（度）"
+                }
+              },
+              "required": [
+                "pointUv"
+              ]
+            },
+            "description": "位置",
+            "minItems": 1
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "familyType",
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "revit_tag_rooms",
+      "method": "POST",
+      "route": "/annotations/room-tags",
+      "summary": "在平面視圖幫房間放房間標籤（預設：視圖所在樓層、還沒標的房間）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_tag_rooms",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "平面視圖 id"
+          },
+          "roomIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "房間 id"
+          },
+          "tagType": {
+            "type": "string",
+            "description": "房間標籤「族群: 類型」"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId"
+        ]
+      }
+    },
+    {
+      "name": "revit_add_revision_clouds",
+      "method": "POST",
+      "route": "/revisions/clouds",
+      "summary": "在圖紙或 2D 視圖畫矩形修訂雲形線，掛到既有修訂或新建一筆修訂。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_revision_clouds",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 2 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": "integer",
+            "description": "圖紙或視圖 id"
+          },
+          "rectsUv": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[u0, v0, u1, v1]（視圖平面座標 mm）",
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "description": "矩形",
+            "minItems": 1
+          },
+          "revisionId": {
+            "type": "integer",
+            "description": "既有修訂 id"
+          },
+          "newRevision": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "issuedBy": {
+                "type": "string"
+              },
+              "issuedTo": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "description"
+            ],
+            "description": "新建修訂"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "viewId",
+          "rectsUv"
+        ]
+      }
+    },
+    {
+      "name": "revit_project_info",
+      "method": "POST",
+      "route": "/project/info",
+      "summary": "讀取或設定專案資訊（專案名稱、編號、業主、地址、狀態、發行日期等）。不給 set＝只讀。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_project_info",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "set": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "integer",
+                "boolean"
+              ]
+            },
+            "description": "{參數名稱: 值}"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_project_units",
+      "method": "POST",
+      "route": "/project/units",
+      "summary": "讀取或設定專案單位：長度（mm／cm／m）、面積、體積與小數位數、角度小數位數。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_project_units",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "length": {
+            "type": "string",
+            "enum": [
+              "mm",
+              "cm",
+              "m"
+            ],
+            "description": "長度單位"
+          },
+          "lengthDecimals": {
+            "type": "integer",
+            "description": "長度小數位數"
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "m2",
+              "cm2",
+              "mm2"
+            ],
+            "description": "面積單位"
+          },
+          "areaDecimals": {
+            "type": "integer",
+            "description": "面積小數位數"
+          },
+          "volume": {
+            "type": "string",
+            "enum": [
+              "m3",
+              "cm3"
+            ],
+            "description": "體積單位"
+          },
+          "volumeDecimals": {
+            "type": "integer",
+            "description": "體積小數位數"
+          },
+          "angleDecimals": {
+            "type": "integer",
+            "description": "角度小數位數"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_add_project_parameter",
+      "method": "POST",
+      "route": "/project/parameters",
+      "summary": "新增專案參數並綁定到品類（實例或類型；文字、數字、整數、長度、面積、是／否）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_add_project_parameter",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "參數名稱"
+          },
+          "dataType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "integer",
+              "length",
+              "area",
+              "yesNo"
+            ],
+            "description": "資料型別",
+            "default": "text"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "品類（例如 Walls、Doors、Rooms）",
+            "minItems": 1
+          },
+          "binding": {
+            "type": "string",
+            "enum": [
+              "instance",
+              "type"
+            ],
+            "description": "實例或類型參數",
+            "default": "instance"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "name",
+          "categories"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_phases",
+      "method": "POST",
+      "route": "/project/phases",
+      "summary": "列出階段與階段篩選；設定元件的建立／拆除階段、視圖的階段與階段篩選。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_phases",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id"
+          },
+          "created": {
+            "type": "string",
+            "description": "建立階段名稱"
+          },
+          "demolished": {
+            "type": "string",
+            "description": "拆除階段名稱；\"none\" 清除"
+          },
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "視圖 id"
+          },
+          "viewPhase": {
+            "type": "string",
+            "description": "視圖階段"
+          },
+          "phaseFilter": {
+            "type": "string",
+            "description": "階段篩選"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_worksets",
+      "method": "POST",
+      "route": "/project/worksets",
+      "summary": "工作集：列出（擁有者、是否開啟／可編輯）、新建、把元件移到指定工作集（略過被別人借用的）。apply=false 預檢。；delete 刪除工作集（元件可 moveTo 或 deleteElements）",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_worksets",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "move",
+              "delete"
+            ],
+            "description": "動作",
+            "default": "list"
+          },
+          "name": {
+            "type": "string",
+            "description": "create：新工作集名稱；delete：要刪除的工作集"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "move：元件 id"
+          },
+          "worksetName": {
+            "type": "string",
+            "description": "move：目標工作集"
+          },
+          "moveTo": {
+            "type": "string",
+            "description": "delete：被刪工作集裡的元件移到這個工作集"
+          },
+          "deleteElements": {
+            "type": "boolean",
+            "description": "delete：沒給 moveTo 時，true＝連同元件一起刪除"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false＝預檢（不改模型），true＝執行",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_export_dwg",
+      "method": "POST",
+      "route": "/export/dwg",
+      "summary": "把視圖或圖紙匯出成 DWG，可用專案裡的匯出設定。apply=false 預檢並列出可用設定。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_dwg",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "視圖 id"
+          },
+          "sheetNumbers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "圖號"
+          },
+          "folder": {
+            "type": "string",
+            "description": "匯出資料夾"
+          },
+          "setupName": {
+            "type": "string",
+            "description": "匯出設定名稱"
+          },
+          "mergedViews": {
+            "type": "boolean",
+            "description": "合併視圖",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "folder"
+        ]
+      }
+    },
+    {
+      "name": "revit_export_nwc",
+      "method": "POST",
+      "route": "/export/nwc",
+      "summary": "匯出 Navisworks NWC（整個模型或指定 3D 視圖）；需要電腦已安裝 NWC 匯出器。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_export_nwc",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "description": "匯出資料夾"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "檔名（不含副檔名）"
+          },
+          "viewId": {
+            "type": "integer",
+            "description": "3D 視圖 id"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "folder"
+        ]
+      }
+    },
+    {
+      "name": "revit_purge_all",
+      "method": "POST",
+      "route": "/purge/all",
+      "summary": "全面清除未使用項目（族群、類型、材質、樣式…，等同「清除未使用的項目」），可多輪；Revit 2024 以上。dryRun 預設 true。",
+      "readOnly": false,
+      "destructive": true,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_purge_all",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "batch 3 of the 'AI as an independent Revit user' plan; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean",
+            "description": "只回報不刪除",
+            "default": true
+          },
+          "passes": {
+            "type": "integer",
+            "description": "清除幾輪（1–5）",
+            "default": 3
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_create_stairs",
+      "method": "POST",
+      "route": "/stairs",
+      "summary": "依兩個樓層建立組合樓梯：直跑、L 型或 U 型（含平台），欄杆可保留、換類型或刪除。apply=false 預檢並算出級數、級高、級深。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_stairs",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch A; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "baseLevel": {
+            "type": "string",
+            "description": "底部樓層"
+          },
+          "topLevel": {
+            "type": "string",
+            "description": "頂部樓層"
+          },
+          "startMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y]（mm）",
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "directionDeg": {
+            "type": "number",
+            "description": "第一跑上樓方向（度，0＝+X）",
+            "default": 0
+          },
+          "shape": {
+            "type": "string",
+            "enum": [
+              "straight",
+              "L",
+              "U"
+            ],
+            "description": "樓梯形狀",
+            "default": "straight"
+          },
+          "turn": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ],
+            "description": "L／U 的轉向",
+            "default": "left"
+          },
+          "widthMm": {
+            "type": "number",
+            "description": "梯段寬 mm",
+            "default": 1200
+          },
+          "firstRunRisers": {
+            "type": "integer",
+            "description": "第一跑級數（L／U）"
+          },
+          "treadDepthMm": {
+            "type": "number",
+            "description": "級深 mm"
+          },
+          "landingDepthMm": {
+            "type": "number",
+            "description": "U 型平台深度 mm（省略＝梯段寬）"
+          },
+          "gapMm": {
+            "type": "number",
+            "description": "U 型兩跑間距 mm",
+            "default": 0
+          },
+          "stairsType": {
+            "type": "string",
+            "description": "樓梯類型（族群: 類型 或類型名）"
+          },
+          "railings": {
+            "type": "boolean",
+            "description": "false＝刪掉自動欄杆；true＝沒有時補上"
+          },
+          "railingType": {
+            "type": "string",
+            "description": "欄杆類型"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "baseLevel",
+          "topLevel",
+          "startMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_railings",
+      "method": "POST",
+      "route": "/railings",
+      "summary": "建立欄杆：沿折線路徑（指定樓層），或掛在既有樓梯上。apply=false 預檢並列出欄杆類型。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_railings",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch A; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "stairsIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "樓梯 id"
+          },
+          "pointsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y]（mm）",
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "路徑折線點（mm）"
+          },
+          "level": {
+            "type": "string",
+            "description": "路徑欄杆所在樓層"
+          },
+          "railingType": {
+            "type": "string",
+            "description": "欄杆類型"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "treads",
+              "stringer"
+            ],
+            "description": "掛在樓梯時的位置",
+            "default": "treads"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_create_profile_family",
+      "method": "POST",
+      "route": "/families/profile",
+      "summary": "依封閉點位建立輪廓族（.rfa，公制輪廓樣板）並載入專案，供牆飾條、樓板邊緣、欄杆等使用。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_profile_family",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch A; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "輪廓族名稱"
+          },
+          "pointsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y]（mm）",
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "封閉輪廓點（mm）",
+            "minItems": 3
+          },
+          "template": {
+            "type": "string",
+            "description": "族樣板名稱或路徑"
+          },
+          "folder": {
+            "type": "string",
+            "description": "存檔資料夾"
+          },
+          "load": {
+            "type": "boolean",
+            "description": "載入目前專案",
+            "default": true
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "name",
+          "pointsMm"
+        ]
+      }
+    },
+    {
+      "name": "revit_create_sweeps",
+      "method": "POST",
+      "route": "/sweeps",
+      "summary": "建立掃掠：牆飾條／分割縫（可指定輪廓與高度）、樓板邊緣（沿樓板頂面外圍）、封簷板與排水溝（沿屋頂簷口）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_create_sweeps",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch A; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "wallSweep",
+              "wallReveal",
+              "slabEdge",
+              "fascia",
+              "gutter"
+            ],
+            "description": "掃掠種類"
+          },
+          "wallIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "牆 id（wallSweep／wallReveal）"
+          },
+          "hostIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "樓板或屋頂 id（slabEdge／fascia／gutter）"
+          },
+          "typeName": {
+            "type": "string",
+            "description": "類型"
+          },
+          "profile": {
+            "type": "string",
+            "description": "輪廓（輪廓族: 類型）"
+          },
+          "heightMm": {
+            "type": "number",
+            "description": "距離 mm",
+            "default": 0
+          },
+          "measuredFrom": {
+            "type": "string",
+            "enum": [
+              "base",
+              "top"
+            ],
+            "description": "距離量自牆底或牆頂",
+            "default": "base"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "exterior",
+              "interior"
+            ],
+            "description": "牆的哪一側",
+            "default": "exterior"
+          },
+          "offsetMm": {
+            "type": "number",
+            "description": "離牆面 mm",
+            "default": 0
+          },
+          "vertical": {
+            "type": "boolean",
+            "description": "垂直飾條",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "revit_area_plans",
+      "method": "POST",
+      "route": "/areas",
+      "summary": "面積平面：列出面積配置與面積、建立面積平面、畫面積邊界（迴圈或沿房間邊界）、放置面積。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_area_plans",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "createPlan",
+              "boundaries",
+              "areas"
+            ],
+            "description": "動作",
+            "default": "list"
+          },
+          "scheme": {
+            "type": "string",
+            "description": "面積配置名稱"
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "樓層名稱（createPlan）"
+          },
+          "viewId": {
+            "type": "integer",
+            "description": "面積平面 id"
+          },
+          "loopsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "description": "[x, y]（mm）",
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "迴圈點"
+            },
+            "description": "封閉迴圈（boundaries）"
+          },
+          "roomIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "沿這些房間的邊界畫（boundaries）"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pointMm": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "[x, y]（mm）",
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "name": {
+                  "type": "string",
+                  "description": "面積名稱"
+                },
+                "number": {
+                  "type": "string",
+                  "description": "面積編號"
+                }
+              },
+              "required": [
+                "pointMm"
+              ]
+            },
+            "description": "要放的面積（areas）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_curtain_wall",
+      "method": "POST",
+      "route": "/curtain",
+      "summary": "帷幕牆：查格線／嵌板／豎框、加垂直或水平格線、在格線上加豎框、換嵌板類型。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_curtain_wall",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "info",
+              "grid",
+              "mullions",
+              "panels"
+            ],
+            "description": "動作",
+            "default": "info"
+          },
+          "wallId": {
+            "type": "integer",
+            "description": "帷幕牆 id"
+          },
+          "verticalMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "垂直格線：離牆起點距離 mm"
+          },
+          "horizontalMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "水平格線：離牆底高度 mm"
+          },
+          "mullionType": {
+            "type": "string",
+            "description": "豎框類型"
+          },
+          "gridLineIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "格線 id"
+          },
+          "panelType": {
+            "type": "string",
+            "description": "嵌板類型"
+          },
+          "panelIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "嵌板 id"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "wallId"
+        ]
+      }
+    },
+    {
+      "name": "revit_attach_walls",
+      "method": "POST",
+      "route": "/walls/attach",
+      "summary": "牆頂或牆底附著到屋頂、樓板、天花（或取消附著）；Revit 2025 以上。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_attach_walls",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "wallIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "牆 id",
+            "minItems": 1
+          },
+          "targetId": {
+            "type": "integer",
+            "description": "附著目標 id"
+          },
+          "location": {
+            "type": "string",
+            "enum": [
+              "top",
+              "base"
+            ],
+            "description": "附著牆頂或牆底",
+            "default": "top"
+          },
+          "detach": {
+            "type": "boolean",
+            "description": "取消附著",
+            "default": false
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "wallIds",
+          "targetId"
+        ]
+      }
+    },
+    {
+      "name": "revit_set_type_layers",
+      "method": "POST",
+      "route": "/types/layers",
+      "summary": "讀取或設定牆／樓板／屋頂／天花類型的構造層（功能、材料、厚度、核心層）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_set_type_layers",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "typeName": {
+            "type": "string",
+            "description": "類型"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "walls",
+              "floors",
+              "roofs",
+              "ceilings"
+            ],
+            "description": "品類"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "function": {
+                  "type": "string",
+                  "enum": [
+                    "structure",
+                    "substrate",
+                    "insulation",
+                    "finish1",
+                    "finish2",
+                    "membrane"
+                  ],
+                  "description": "層功能",
+                  "default": "structure"
+                },
+                "material": {
+                  "type": "string",
+                  "description": "材料名稱"
+                },
+                "thicknessMm": {
+                  "type": "number",
+                  "description": "厚度 mm"
+                },
+                "core": {
+                  "type": "boolean",
+                  "description": "核心層"
+                }
+              },
+              "required": [
+                "thicknessMm"
+              ]
+            },
+            "description": "構造層（由外到內）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "typeName"
+        ]
+      }
+    },
+    {
+      "name": "revit_materials",
+      "method": "POST",
+      "route": "/materials",
+      "summary": "材料：列出、建立（可複製既有材料、設顏色與透明度）、指定到元件或類型的材料參數。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_materials",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "assign"
+            ],
+            "description": "動作",
+            "default": "list"
+          },
+          "filter": {
+            "type": "string",
+            "description": "名稱關鍵字"
+          },
+          "name": {
+            "type": "string",
+            "description": "新材料名稱"
+          },
+          "basedOn": {
+            "type": "string",
+            "description": "複製自"
+          },
+          "colorRgb": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "[r,g,b]",
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "transparency": {
+            "type": "integer",
+            "description": "透明度 0–100"
+          },
+          "materialClass": {
+            "type": "string",
+            "description": "材料類別"
+          },
+          "material": {
+            "type": "string",
+            "description": "要指定的材料"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id"
+          },
+          "typeNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "類型（族群: 類型）"
+          },
+          "parameter": {
+            "type": "string",
+            "description": "材料參數名稱"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_groups",
+      "method": "POST",
+      "route": "/groups",
+      "summary": "群組：列出群組類型與數量、把元件建成群組（可命名）、在指定位置放置群組。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_groups",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "place"
+            ],
+            "description": "動作",
+            "default": "list"
+          },
+          "elementIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "元件 id（create）"
+          },
+          "name": {
+            "type": "string",
+            "description": "群組類型名稱（create）"
+          },
+          "groupType": {
+            "type": "string",
+            "description": "群組類型（place）"
+          },
+          "pointsMm": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x,y] 或 [x,y,z]"
+            },
+            "description": "放置點 mm（place）"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "revit_schedule_settings",
+      "method": "POST",
+      "route": "/schedules/settings",
+      "summary": "明細表排序／群組、篩選、逐項列出、總計、隱藏欄位；不給設定＝讀目前設定。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_schedule_settings",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scheduleId": {
+            "type": "integer",
+            "description": "明細表 id"
+          },
+          "sort": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "欄位"
+                },
+                "descending": {
+                  "type": "boolean",
+                  "description": "遞減"
+                },
+                "header": {
+                  "type": "boolean",
+                  "description": "群組頁首"
+                },
+                "footer": {
+                  "type": "boolean",
+                  "description": "群組頁尾"
+                },
+                "blankLine": {
+                  "type": "boolean",
+                  "description": "空白行"
+                }
+              },
+              "required": [
+                "field"
+              ]
+            },
+            "description": "排序／群組"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "欄位"
+                },
+                "op": {
+                  "type": "string",
+                  "description": "運算子"
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "number"
+                  ],
+                  "description": "值"
+                }
+              },
+              "required": [
+                "field",
+                "op"
+              ]
+            },
+            "description": "篩選"
+          },
+          "itemize": {
+            "type": "boolean",
+            "description": "逐項列出每個實例"
+          },
+          "grandTotal": {
+            "type": "boolean",
+            "description": "顯示總計"
+          },
+          "hide": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要隱藏的欄位"
+          },
+          "show": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要顯示的欄位"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "scheduleId"
+        ]
+      }
+    },
+    {
+      "name": "revit_family_type_params",
+      "method": "POST",
+      "route": "/families/type-params",
+      "summary": "可載入族的類型參數：列出各類型參數值、修改類型參數值、設定公式（開族檔改公式後重新載入）。apply=false 預檢。",
+      "readOnly": false,
+      "destructive": false,
+      "exposedTo": [
+        "panel",
+        "mcp"
+      ],
+      "pathParams": [],
+      "tsTool": "revit_family_type_params",
+      "tsCoverage": "covered",
+      "shapeAuthority": "manifest",
+      "source": "v1.10 batch B/C; independently implemented",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "description": "族名稱"
+          },
+          "type": {
+            "type": "string",
+            "description": "類型名稱"
+          },
+          "set": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "integer",
+                "boolean"
+              ]
+            },
+            "description": "{參數: 值}"
+          },
+          "formulas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "{參數: 公式}"
+          },
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false＝預檢（不改模型），true＝執行"
+          }
+        },
+        "required": [
+          "family"
+        ]
       }
     }
   ]

@@ -17,6 +17,7 @@ namespace RevitMcpAddin.Handlers
     ///  POST /views/template   { viewIds, templateName|templateId, apply }   套用樣板（"" = 移除樣板）
     ///  POST /views/categories { viewIds, categories:[OST_名或顯示名], hidden:bool, apply }
     ///       視圖有套樣板且樣板控制 V/G 時，改動會寫在樣板上並回報。
+    ///  POST /views/grids3d   { viewIds, levels, mode:set|add|remove|clear, apply }  3D 視圖顯示柱線的樓層
     /// </summary>
     public class ViewSettingsHandler
     {
@@ -150,6 +151,81 @@ namespace RevitMcpAddin.Handlers
                 tx.Commit();
             }
             return Ok(new { applied = true, hidden, plan, warnings = warn });
+        }
+
+        /// <summary>
+        /// POST /views/grids3d { viewIds, levels:[名稱或id], mode:"set"|"add"|"remove"|"clear", apply }
+        /// 3D 視圖的「顯示柱線」（Show Grids）：指定柱線要畫在哪些樓層平面上。
+        /// 只有與該樓層平面相交的柱線會顯示。此設定不屬於視圖樣板，逐一視圖設定。
+        /// </summary>
+        public string SetGrids3d(string body)
+        {
+            var r = Parse(body); bool apply = (bool?)r["apply"] ?? false;
+            string mode = ((string?)r["mode"] ?? "set").ToLowerInvariant();
+            if (mode != "set" && mode != "add" && mode != "remove" && mode != "clear")
+                return Fail($"mode 只能是 set／add／remove／clear，收到「{mode}」。");
+
+            var warn = new List<string>();
+            var views = ResolveViews(r, warn);
+            var v3 = new List<View3D>();
+            foreach (var v in views)
+                if (v is View3D d && !d.IsTemplate) v3.Add(d); else warn.Add($"{v.Name} 不是 3D 視圖，略過");
+            if (v3.Count == 0) return Fail("需要至少一個 3D 視圖的 viewIds。" + string.Join("；", warn));
+
+            var allLevels = new FilteredElementCollector(_doc).OfClass(typeof(Level)).Cast<Level>()
+                .OrderBy(l => l.Elevation).ToList();
+            var picked = new List<Level>();
+            foreach (var t in (r["levels"] as JArray) ?? new JArray())
+            {
+                Level? lv = null;
+                if (t.Type == JTokenType.Integer) lv = allLevels.FirstOrDefault(l => l.Id.Value == (long)t);
+                else
+                {
+                    var key = (string?)t ?? "";
+                    lv = allLevels.FirstOrDefault(l => l.Name == key)
+                         ?? allLevels.FirstOrDefault(l => string.Equals(l.Name, key, StringComparison.OrdinalIgnoreCase));
+                    if (lv == null && long.TryParse(key, out var lid)) lv = allLevels.FirstOrDefault(l => l.Id.Value == lid);
+                }
+                if (lv == null) warn.Add($"找不到樓層 {t}"); else if (!picked.Contains(lv)) picked.Add(lv);
+            }
+            if (mode != "clear" && picked.Count == 0)
+                return Fail("需要 levels（樓層名稱或 id）。可用：" + string.Join("、", allLevels.Select(l => l.Name)) +
+                            (warn.Count > 0 ? "。" + string.Join("；", warn) : ""));
+
+            string LvName(ElementId id) => _doc.GetElement(id)?.Name ?? id.Value.ToString();
+
+            var plan = new List<object>();
+            var next = new Dictionary<long, HashSet<ElementId>>();
+            foreach (var v in v3)
+            {
+                var cur = new HashSet<ElementId>(v.GetLevelsThatShowGrids());
+                var nxt = mode switch
+                {
+                    "set"    => new HashSet<ElementId>(picked.Select(l => l.Id)),
+                    "add"    => new HashSet<ElementId>(cur.Concat(picked.Select(l => l.Id))),
+                    "remove" => new HashSet<ElementId>(cur.Where(id => !picked.Any(l => l.Id == id))),
+                    _        => new HashSet<ElementId>()
+                };
+                next[v.Id.Value] = nxt;
+                plan.Add(new
+                {
+                    id = v.Id.Value, name = v.Name,
+                    perspective = v.IsPerspective,
+                    sectionBox = v.IsSectionBoxActive,
+                    before = cur.Select(LvName).ToList(),
+                    after = nxt.Select(LvName).ToList()
+                });
+                if (v.IsPerspective) warn.Add($"{v.Name} 是透視圖：柱線標頭不會顯示，線也不會是虛線");
+            }
+            if (!apply) return Ok(new { applied = false, mode, views = plan, warnings = warn });
+
+            using (var tx = new Transaction(_doc, "MCP 3D 視圖顯示柱線"))
+            {
+                tx.Start();
+                foreach (var v in v3) v.ShowGridsOnLevels(next[v.Id.Value]);
+                tx.Commit();
+            }
+            return Ok(new { applied = true, mode, views = plan, warnings = warn });
         }
     }
 }

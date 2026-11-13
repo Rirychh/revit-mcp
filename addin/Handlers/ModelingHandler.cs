@@ -22,9 +22,6 @@ namespace RevitMcpAddin.Handlers
         private readonly Document _doc;
         public ModelingHandler(Document doc) => _doc = doc;
 
-        private static string Done(string what, (bool committed, List<string> errors, List<string> warnings) res, object payload) =>
-            res.committed ? Ok(payload) : Fail($"{what}失敗，已整批回滾、模型沒有變更：" + string.Join("；", res.errors));
-
         // POST /grids  { grids:[{ name?, start:[x,y], end:[x,y] }], apply }
         public string Grids(string body)
         {

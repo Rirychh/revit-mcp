@@ -141,7 +141,7 @@ async function chooseTarget(document?: string, ownDoc = false): Promise<RevitIns
   );
 }
 
-const DOC_DESC = "目標檔名關鍵字（作用中檔案）。多個 Revit 同時開著時必填，或先用 revit_use_instance。";
+const DOC_DESC = "目標檔名關鍵字；只有多個 Revit 同時開著時需要。";
 
 /** 必須在註冊任何工具之前呼叫。 */
 export function installTargetGuard(server: McpServer): void {
@@ -164,9 +164,10 @@ export function installTargetGuard(server: McpServer): void {
           ? config.inputSchema.extend({ document: docField })
           : { ...config.inputSchema, document: docField };
 
+    // 多 Revit 的完整規則寫在 server instructions；這裡只留一行提示，避免每支工具重複一大段。
     const note = ownDoc
-      ? `\n\n多個 Revit 同時開著時：這個工具的 document 參數同時用來選實例（該檔在哪個 Revit 裡開著就送去那邊），並原樣交給 Revit 處理；沒指定且開著兩個以上會擋下不執行。`
-      : `\n\n多個 Revit 同時開著時：加 document（作用中檔名關鍵字）指定目標，或先用 revit_use_instance；沒指定會擋下不執行。`;
+      ? `\n（document 也用來選擇是哪個 Revit 裡開著的檔）`
+      : "";
     const description = `${config?.description ?? ""}${note}`;
 
     const wrapped = async (args: any, extra: any) => {

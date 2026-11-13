@@ -14,6 +14,7 @@ namespace RevitMcpAddin.Handlers
 {
     /// <summary>
     /// DWG 幾何萃取（存成工作階段快取）與依快取產生 BIM 元件：柱、樓板。
+    /// 牆請用既有的 CAD 牆比對工具（/cad/wall-diff，雙線配對成中心線）。
     /// 座標換算全部在程式裡做，DWG 已是模型座標（ImportInstance 幾何），不需要再配準。
     /// （功能構想參考 MLabs Revit MCP 公開的工具清單，程式獨立實作）
     /// </summary>
@@ -134,7 +135,7 @@ namespace RevitMcpAddin.Handlers
                 cacheId = c.Id, view = view.Name, cads = imports.Select(i => _doc.GetElement(i.GetTypeId())?.Name).Distinct(),
                 totals = new { lines = c.Lines.Count, closedLoops = c.Loops.Count, circles = c.Circles.Count }, extentsMm = ext,
                 layers = layerStats,
-                next = "用 revit_cad_generate_bim 以 cacheId 產生柱（矩形／圓形迴圈）或樓板（封閉迴圈）。",
+                next = "用 revit_cad_generate_bim 以 cacheId 產生柱（矩形／圓形迴圈）或樓板（封閉迴圈）；牆請用 CAD 牆比對工具。",
             });
         }
 
@@ -174,7 +175,7 @@ namespace RevitMcpAddin.Handlers
 
             if (mode == "columns") return Columns(r, c, LayerOk, lv, apply);
             if (mode == "floors") return Floors(r, c, LayerOk, lv, apply);
-            return Fail("mode 要是 columns 或 floors。");
+            return Fail("mode 要是 columns 或 floors。牆請用 CAD 牆比對工具。");
         }
 
         private string Columns(JObject r, Cache c, Func<string, bool> layerOk, Level lv, bool apply)

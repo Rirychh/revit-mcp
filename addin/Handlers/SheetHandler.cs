@@ -36,6 +36,13 @@ namespace RevitMcpAddin.Handlers
             return all.FirstOrDefault(t => t.Name == name);
         }
 
+        /// <summary>有指定名稱就要找到；沒指定就用 naming.json 的預設，找不到再用第一個文字類型。</summary>
+        private TextNoteType? PickTextType(string? asked, string? cfgDefault)
+        {
+            if (!string.IsNullOrWhiteSpace(asked)) return FindTextType(asked);
+            return (string.IsNullOrWhiteSpace(cfgDefault) ? null : FindTextType(cfgDefault)) ?? FindTextType(null);
+        }
+
         private static string TypeName(Element? e) =>
             e?.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM)?.AsString() ?? e?.Name ?? "";
 
@@ -178,19 +185,16 @@ namespace RevitMcpAddin.Handlers
         {
             var r = Parse(body);
             bool apply = (bool?)r["apply"] ?? false;
-            var tt = FindTextType((string?)r["textTypeName"] ?? "BAF 3mm 內文");
+            var tt = PickTextType((string?)r["textTypeName"], Naming.TextType);
             if (tt == null) return Fail("找不到文字類型。");
 
-            var cfg = new Dictionary<string, (double x, double y, double dy, int chars, int maxLines)>
-            {
-                ["範例圖框(執照圖)"] = (119, 42.5, 9.8, 18, 3),
-                ["範例圖框(顧問)"]   = (119, 42.5, 9.8, 18, 3),
-                ["範例圖框(細設圖)"] = (471.5, 52, 10.5, 22, 4),
-            };
-            if (r["titleBlocks"] is JObject extra)
-                foreach (var p in extra.Properties())
-                    cfg[p.Name] = ((double?)p.Value["x"] ?? 119, (double?)p.Value["y"] ?? 42.5, (double?)p.Value["dy"] ?? 9.8,
-                                   (int?)p.Value["chars"] ?? 18, (int?)p.Value["maxLines"] ?? 3);
+            // 圖框座標：naming.json 的 titleBlocks 先載入，再由請求的 titleBlocks 覆寫
+            var cfg = new Dictionary<string, (double x, double y, double dy, int chars, int maxLines)>();
+            foreach (var src in new[] { Naming.TitleBlocks, r["titleBlocks"] as JObject })
+                if (src != null)
+                    foreach (var p in src.Properties())
+                        cfg[p.Name] = ((double?)p.Value["x"] ?? 119, (double?)p.Value["y"] ?? 42.5, (double?)p.Value["dy"] ?? 9.8,
+                                       (int?)p.Value["chars"] ?? 18, (int?)p.Value["maxLines"] ?? 3);
 
             var map = SheetsByNumber();
             var plan = new List<(ViewSheet s, XYZ o, (double x, double y, double dy, int chars, int maxLines) c, List<string> lines)>();
@@ -203,7 +207,7 @@ namespace RevitMcpAddin.Handlers
                     .WhereElementIsNotElementType().FirstOrDefault() as FamilyInstance;
                 if (tb == null) { skipped.Add($"{n}：沒有圖框"); continue; }
                 var tn = TypeName(_doc.GetElement(tb.GetTypeId()));
-                if (!cfg.TryGetValue(tn, out var c)) { skipped.Add($"{n}：圖框「{tn}」未設定座標"); continue; }
+                if (!cfg.TryGetValue(tn, out var c)) { skipped.Add($"{n}：圖框「{tn}」未設定座標（在 naming.json 的 titleBlocks 或請求的 titleBlocks 加上）"); continue; }
                 var o = (tb.Location as LocationPoint)?.Point ?? XYZ.Zero;
                 double x0 = o.X + (c.x - 7) / FT, x1 = o.X + (c.x + c.chars * 4.5) / FT;
                 double y1 = o.Y + (c.y + 3.5) / FT, y0 = o.Y + (c.y - c.dy * c.maxLines) / FT;
@@ -272,7 +276,7 @@ namespace RevitMcpAddin.Handlers
             bool apply = (bool?)r["apply"] ?? false;
             long revId = (long?)r["revisionId"] ?? 0;
             if (_doc.GetElement(new ElementId((int)revId)) is not Revision rev) return Fail($"找不到修訂 {revId}。用 GET /revisions 查。");
-            var tt = FindTextType((string?)r["textTypeName"] ?? "BAF 3mm 內文(紅)");
+            var tt = PickTextType((string?)r["textTypeName"], Naming.RevisionCloudTextType);
             if (tt == null) return Fail("找不到文字類型。");
             double offMm = (double?)r["offsetMm"] ?? 4;
             var notes = new Dictionary<string, string>();
