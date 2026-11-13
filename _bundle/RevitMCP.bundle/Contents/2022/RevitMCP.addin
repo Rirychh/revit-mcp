@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Revit MCP</Name>
+    <Assembly>RevitMcpAddin.dll</Assembly>
+    <FullClassName>RevitMcpAddin.App</FullClassName>
+    <AddInId>15ff4211-b312-4766-9263-a31f9a19bdf0</AddInId>
+    <VendorId>RIRY</VendorId>
+    <VendorDescription>Rita (Rirychh), https://github.com/Rirychh/revit-mcp</VendorDescription>
+  </AddIn>
+</RevitAddIns>
