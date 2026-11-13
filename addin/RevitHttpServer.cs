@@ -44,6 +44,9 @@ namespace RevitMcpAddin
         private readonly RevitApiExecutor _executor;
         private CancellationTokenSource? _cts;
 
+        /// <summary>定時確認 token 檔仍是本實例的 token，不是就重寫（自我修復）。</summary>
+        private System.Threading.Timer? _tokenWatch;
+
         public RevitHttpServer(UIApplication uiApp, RevitApiExecutor executor)
         {
             _uiApp = uiApp;
@@ -72,7 +75,11 @@ namespace RevitMcpAddin
                     CurrentPort = port;
                     // 先備好 token 再開始收請求，避免「已在聽但還沒有 token」的空窗。
                     _token = GenerateToken();
-                    WriteTokenFile(port, _token);
+                    // 寫檔失敗不放棄這個埠：放棄會讓 catch 關掉 listener 再試下一埠，
+                    // token 檔可能停在舊實例的內容，client 一律 401。
+                    // 改成先盡力寫，之後由 _tokenWatch 每 3 秒檢查、不符就重寫。
+                    EnsureTokenFile();
+                    _tokenWatch = new System.Threading.Timer(_ => EnsureTokenFile(), null, 3000, 3000);
                     _cts = new CancellationTokenSource();
                     Task.Run(() => ListenLoop(_cts.Token));
                     return;
@@ -93,13 +100,16 @@ namespace RevitMcpAddin
         public void Stop()
         {
             var port = CurrentPort;
+            var myToken = _token;
+            _tokenWatch?.Dispose();
+            _tokenWatch = null;
             _cts?.Cancel();
             try { _listener?.Stop(); } catch { }
             _listener   = null;
             // 先關掉認證再刪檔：就算刪檔失敗，_token = null 也讓後續請求一律 401。
             _token      = null;
             CurrentPort = 0;
-            if (port != 0) DeleteTokenFile(port);
+            if (port != 0) DeleteTokenFile(port, myToken);
         }
 
         // ── 認證：token 檔 ───────────────────────────────────────────
@@ -122,16 +132,45 @@ namespace RevitMcpAddin
         {
             var path = TokenFilePath(port);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            // 先寫暫存檔再取代，client 不會讀到寫到一半的檔。
+            var tmp = path + "." + System.Diagnostics.Process.GetCurrentProcess().Id + ".tmp";
             // 不帶 BOM：client 端直接讀字串比對，BOM 會讓比對失敗。
-            File.WriteAllText(path, token, new UTF8Encoding(false));
+            File.WriteAllText(tmp, token, new UTF8Encoding(false));
+            if (File.Exists(path)) File.Replace(tmp, path, null);
+            else File.Move(tmp, path);
         }
 
-        private static void DeleteTokenFile(int port)
+        /// <summary>
+        /// 確認 token 檔內容等於本實例的 token；不存在或不同就重寫。
+        /// 涵蓋：舊實例當掉留下的殘檔、啟動時寫檔失敗（檔案被鎖）、被其他程式覆蓋或刪除。
+        /// 失敗只記錄、下一輪再試，不丟例外（Timer 執行緒上未處理的例外會讓 Revit 當掉）。
+        /// </summary>
+        private static void EnsureTokenFile()
+        {
+            var port  = CurrentPort;
+            var token = _token;
+            if (port == 0 || string.IsNullOrEmpty(token)) return;
+            try
+            {
+                var path = TokenFilePath(port);
+                if (File.Exists(path) && File.ReadAllText(path).Trim() == token) return;
+                WriteTokenFile(port, token!);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[RevitMCP] token file write failed, will retry: {ex.Message}");
+            }
+        }
+
+        /// <summary>只刪內容是自己 token 的檔，避免刪到已接手同一埠的新實例的檔。</summary>
+        private static void DeleteTokenFile(int port, string? myToken)
         {
             try
             {
                 var path = TokenFilePath(port);
-                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path) &&
+                    (myToken == null || File.ReadAllText(path).Trim() == myToken))
+                    File.Delete(path);
             }
             catch (Exception ex)
             {
