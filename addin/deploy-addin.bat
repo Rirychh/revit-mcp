@@ -1,19 +1,20 @@
 @echo off
-rem Revit MCP — © 2026 Rita (Rirychh)
+rem Revit MCP - (c) 2026 Rita (Rirychh)
 rem https://github.com/Rirychh/revit-mcp
-REM ─────────────────────────────────────────────────────────────────────
-REM  這支以前自己寫死了一條部署路徑，而且已經過期：
-REM    bin\Release\net48\RevitMcpAddin.dll   (2026-08-12, 72KB)
-REM  現行建置輸出在
-REM    bin\Revit2024\Release\net48\RevitMcpAddin.dll   (694KB)
-REM  它還不會重新 build，也沒有複製 RevitMcpAddin.addin manifest，
-REM  所以跑下去會靜默把 Revit 外掛降級回 7 週前的版本。
-REM
-REM  部署邏輯只留一份：deploy-2024.bat（build + 備份 + DLL + manifest）。
-REM  這支現在只是轉呼叫，避免同樣的路徑漂移再發生一次。
-REM  多版本（2025/2024/2022）一次部署請用 deploy-addin.ps1。
-REM ─────────────────────────────────────────────────────────────────────
-echo [note] deploy-addin.bat 已改為轉呼叫 deploy-2024.bat（部署邏輯的唯一正本）。
-echo.
-call "%~dp0deploy-2024.bat" %*
-exit /b %ERRORLEVEL%
+rem ---------------------------------------------------------------------
+rem  Thin wrapper. All deployment logic lives in deploy-addin.ps1
+rem  (build + backup + DLL + .addin manifest), so there is only one copy
+rem  to keep correct. Arguments are passed straight through, e.g.
+rem      deploy-addin.bat -Versions 2024,2025
+rem      deploy-addin.bat -SkipBuild
+rem  With no arguments it deploys to every installed Revit 2022-2027.
+rem
+rem  Save your work and close Revit first. This never closes Revit for you.
+rem  (Kept ASCII-only on purpose: cmd.exe reads .bat files in the system
+rem  code page, so non-ASCII text here can break parsing.)
+rem ---------------------------------------------------------------------
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy-addin.ps1" %*
+set RC=%ERRORLEVEL%
+rem Keep the window open only when started by double-click.
+echo %cmdcmdline% | find /i "%~nx0" >nul && pause
+exit /b %RC%
