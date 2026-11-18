@@ -547,7 +547,7 @@
       "name": "revit_create_element",
       "method": "POST",
       "route": "/elements",
-      "summary": "在指定座標放置一個族實例。",
+      "summary": "在指定座標放置一個族實例。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -560,6 +560,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "familyName": {
             "type": "string",
             "minLength": 1,
@@ -1218,7 +1223,7 @@
       "name": "revit_modify_element",
       "method": "PUT",
       "route": "/elements/{elementId}",
-      "summary": "修改既有元件的一個或多個參數。",
+      "summary": "修改既有元件的一個或多個參數。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -1233,6 +1238,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "elementId": {
             "type": "integer",
             "description": "要修改的元件 ElementId"
@@ -1274,7 +1284,7 @@
       "name": "revit_create_levels",
       "method": "POST",
       "route": "/levels",
-      "summary": "批次建立標高（樓層）。",
+      "summary": "批次建立標高（樓層）。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -1287,6 +1297,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "levels": {
             "type": "array",
             "minItems": 1,
@@ -1353,7 +1368,7 @@
       "name": "revit_create_walls",
       "method": "POST",
       "route": "/walls",
-      "summary": "沿一或多條折線在單一樓層建牆（含帷幕牆）。",
+      "summary": "沿一或多條折線在單一樓層建牆（含帷幕牆）。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -1366,6 +1381,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "wallTypeName": {
             "type": "string",
             "description": "牆類型名稱（省略用預設）"
@@ -1438,7 +1458,7 @@
       "name": "revit_create_floors",
       "method": "POST",
       "route": "/floors",
-      "summary": "批次在一或多個樓層建樓板（可含開口）。",
+      "summary": "批次在一或多個樓層建樓板（可含開口）。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -1451,6 +1471,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "floorTypeName": {
             "type": "string",
             "description": "樓板類型名稱"
@@ -1532,7 +1557,7 @@
       "name": "revit_create_columns",
       "method": "POST",
       "route": "/columns",
-      "summary": "以 DirectShape 建圓柱（歸在結構柱品類）。",
+      "summary": "以 DirectShape 建圓柱（歸在結構柱品類）。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -1545,6 +1570,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "columns": {
             "type": "array",
             "minItems": 1,
@@ -2363,7 +2393,7 @@
       "name": "revit_create_view",
       "method": "POST",
       "route": "/views",
-      "summary": "建立新視圖（平面／剖面／3D）。",
+      "summary": "建立新視圖（平面／剖面／3D）。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
       "exposedTo": [
@@ -2376,6 +2406,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "viewType": {
             "type": "string",
             "enum": [
@@ -3374,10 +3409,9 @@
       "name": "revit_link_cad",
       "method": "POST",
       "route": "/links/cad",
-      "summary": "連結 CAD（DWG）檔到指定樓層的平面視圖。",
+      "summary": "連結 CAD（DWG）檔到指定樓層的平面視圖。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
-      "alwaysWrites": true,
       "exposedTo": [
         "panel",
         "mcp"
@@ -3385,10 +3419,15 @@
       "pathParams": [],
       "tsTool": "revit_link_cad",
       "tsCoverage": "covered",
-      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入。",
+      "notes": "apply=false（預設）由 RouteGuards 只回預檢，不進 Handler；apply=true 才開 Transaction 寫入。",
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "document": {
             "type": "string",
             "description": "目標文件名關鍵字；省略＝作用中文件"
@@ -3426,7 +3465,7 @@
       "name": "revit_mass_boxes",
       "method": "POST",
       "route": "/mass/boxes",
-      "summary": "在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。",
+      "summary": "在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。apply=false 預檢。",
       "readOnly": false,
       "destructive": true,
       "exposedTo": [
@@ -3440,6 +3479,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "boxes": {
             "type": "array",
             "minItems": 1,
@@ -3789,10 +3833,9 @@
       "name": "revit_move_link",
       "method": "POST",
       "route": "/links/move",
-      "summary": "移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。",
+      "summary": "移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。apply=false 預檢。",
       "readOnly": false,
       "destructive": false,
-      "alwaysWrites": true,
       "exposedTo": [
         "panel",
         "mcp"
@@ -3800,10 +3843,15 @@
       "pathParams": [],
       "tsTool": "revit_move_link",
       "tsCoverage": "covered",
-      "notes": "沒有 apply／dryRun 開關，每次呼叫都直接開 Transaction 寫入。nameContains 若對不到「剛好一個」連結會丟錯（這是刻意的保護）。",
+      "notes": "apply=false（預設）由 RouteGuards 只回預檢，不進 Handler；apply=true 才開 Transaction 寫入。nameContains 若對不到「剛好一個」連結會丟錯（這是刻意的保護）。",
       "input_schema": {
         "type": "object",
         "properties": {
+          "apply": {
+            "type": "boolean",
+            "default": false,
+            "description": "false（預設）＝只預檢，回報請求內容與檢查結果，模型不變；true＝執行"
+          },
           "document": {
             "type": "string",
             "description": "目標文件名關鍵字；省略＝作用中文件"

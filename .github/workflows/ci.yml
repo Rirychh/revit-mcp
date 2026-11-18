@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    name: MCP server (build + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      # build → verify_tools（工具清單對 manifest）→ test_target_guard → test_guards
+      - run: npm test
+
+  manifest:
+    name: Manifest copies identical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmp addin/tools-manifest.json server/tools-manifest.json
+
+  addin:
+    name: Add-in (Revit ${{ matrix.revit }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        revit: ["2022", "2023", "2024", "2025", "2026", "2027"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # Revit API 由 NuGet（Nice3point.Revit.Api.*）提供，不需要安裝 Revit
+      - run: dotnet build addin/RevitMcpAddin.csproj -c Release -p:RevitVersion=${{ matrix.revit }}
