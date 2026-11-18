@@ -181,10 +181,10 @@ namespace RevitMcpAddin.Handlers
                 {
                     if (!File.Exists(nf)) throw new FileNotFoundException("Nested family not found", nf);
                     using var tl = new Transaction(fdoc, "MCP Load Nested");
-                    tl.Start();
+                    TxGuard.Start(tl);
                     if (!fdoc.LoadFamily(nf, FamilyLoad.Overwrite, out _))
                         _warn.Add($"LoadFamily returned false (already loaded?): {nf}");
-                    tl.Commit();
+                    TxGuard.Commit(tl);
                 }
 
                 // 2) 主要內容

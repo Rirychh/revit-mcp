@@ -33,6 +33,14 @@ namespace RevitMcpAddin
         /// <summary>Client 必須帶的認證 header 名稱。</summary>
         public const string TokenHeader = "X-Revit-Mcp-Token";
 
+        /// <summary>Client 可帶的逾時 header（毫秒）；沒帶用 DefaultTimeoutMs。</summary>
+        public const string TimeoutHeader = "X-Revit-Mcp-Timeout-Ms";
+        public const int DefaultTimeoutMs = 300000;
+
+        /// <summary>限制在 5 秒～30 分鐘之間，格式不對就用預設值。</summary>
+        private static int ParseTimeout(string? header) =>
+            int.TryParse(header, out var ms) ? Math.Min(Math.Max(ms, 5000), 1800000) : DefaultTimeoutMs;
+
         /// <summary>本實例實際綁定的埠；尚未啟動時為 0。</summary>
         public static int CurrentPort { get; private set; }
 
@@ -301,8 +309,14 @@ namespace RevitMcpAddin
                 }
 
                 // Dispatch 路由到各 Handler（透過 ExternalEvent 在 Revit 主執行緒執行）
+                // 逾時由呼叫端指定（X-Revit-Mcp-Timeout-Ms），讓 add-in 比 MCP server 先逾時：
+                // 這樣回給 AI 的是「沒有執行／仍在執行」的明確結果，而不是 server 端單方面放棄。
+                // 會改模型的請求（非 GET）以「方法＋路徑＋內容」當 key，尚未結束時擋掉重送。
+                int timeoutMs = ParseTimeout(req.Headers[TimeoutHeader]);
+                string? key = method == "GET" ? null : method + " " + path + "\n" + body;
+                var query = ParseQuery(req.Url);
                 string json = await Task.Run(() =>
-                    _executor.Execute(app => Route(app, method, path, body, ParseQuery(req.Url))));
+                    _executor.Execute(app => Route(app, method, path, body, query), timeoutMs, key));
 
                 var bytes = Encoding.UTF8.GetBytes(json);
                 resp.StatusCode = 200;
@@ -324,6 +338,11 @@ namespace RevitMcpAddin
         public static string Route(UIApplication uiApp, string method, string path, string body,
                              System.Collections.Specialized.NameValueCollection qs)
         {
+            // 共用前置檢查：停用的工具、被別人借用的元件、早期建模工具的預檢。
+            // 回 null＝放行。HTTP 與對話面板都經過這裡。
+            var guarded = RouteGuards.Check(uiApp, method, path, body);
+            if (guarded != null) return guarded;
+
             // /info：多實例探索用。刻意放在 ActiveUIDocument 檢查之前，
             // 因為還沒開啟任何模型的 Revit 也必須能被辨識出來。
             if (path == "/info" && method == "GET")

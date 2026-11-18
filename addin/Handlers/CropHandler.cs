@@ -39,7 +39,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<CropViewRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail($"View {req.ViewId} not found.");
             if (view.IsTemplate)
                 return Fail("視圖樣板不能設裁切範圍。");
@@ -140,14 +140,14 @@ namespace RevitMcpAddin.Handlers
             {
                 foreach (var id in req.ElementIds)
                 {
-                    var el = _doc.GetElement(new ElementId((int)id));
+                    var el = _doc.GetElement(ElementIdCompat.NewId(id));
                     if (el == null)
                     { result.Skipped.Add(new SkippedDto { ElementId = id, Reason = "元件不存在" }); continue; }
                     var bb = el.get_BoundingBox(view) ?? el.get_BoundingBox(null);
                     if (bb == null)
                     { result.Skipped.Add(new SkippedDto { ElementId = id, Reason = "取不到範圍框" }); continue; }
 
-                    var c = MakeCand(el.Id.IntegerValue, "本模型", TypeNameOf(el, _doc),
+                    var c = MakeCand(el.Id.Value, "本模型", TypeNameOf(el, _doc),
                                      0, "指定", bb, Transform.Identity, inv, horizontal);
                     cands.Add(c);
                     result.Matched.Add(c.Dto);
@@ -169,7 +169,7 @@ namespace RevitMcpAddin.Handlers
                         if (ldoc == null)
                         {
                             result.Skipped.Add(new SkippedDto
-                            { ElementId = li.Id.IntegerValue, Reason = "連結未載入，跳過" });
+                            { ElementId = li.Id.Value, Reason = "連結未載入，跳過" });
                             continue;
                         }
                         var xf = li.GetTotalTransform();
@@ -204,7 +204,7 @@ namespace RevitMcpAddin.Handlers
             double seedLo, seedHi;
             if (req.SeedElementId.HasValue)
             {
-                var se = _doc.GetElement(new ElementId((int)req.SeedElementId.Value));
+                var se = _doc.GetElement(ElementIdCompat.NewId(req.SeedElementId.Value));
                 if (se == null)
                     return Fail($"seedElementId {req.SeedElementId.Value} 不存在。");
                 var sbb = se.get_BoundingBox(view) ?? se.get_BoundingBox(null);
@@ -360,7 +360,7 @@ namespace RevitMcpAddin.Handlers
                 if (matchedBy != null && perpOnly && align < 0.7)
                     matchedBy = null;   // 條件符合但走向不對，當作未符合並列進 nearMiss
 
-                var c = MakeCand(e.Id.IntegerValue, label, typeName, thick,
+                var c = MakeCand(e.Id.Value, label, typeName, thick,
                                  matchedBy ?? (align < 0.7 ? $"走向不符（{align:0.00}）" : "未符合"),
                                  bb, xf, inv, horizontal);
                 c.Dto.RunAlignment = Math.Round(align, 3);
@@ -444,7 +444,7 @@ namespace RevitMcpAddin.Handlers
                                   double minX, double maxX, double minY, double maxY)
         {
             using var tx = new Transaction(_doc, "MCP 設定視圖裁切範圍");
-            tx.Start();
+            TxGuard.Start(tx);
             try
             {
                 view.CropBoxActive = true;
@@ -476,7 +476,7 @@ namespace RevitMcpAddin.Handlers
                 return Fail("設定裁切框失敗：" + ex.Message +
                             "（非矩形裁切造型的視圖需先在 Revit 裡把裁切造型重設為矩形）");
             }
-            tx.Commit();
+            TxGuard.Commit(tx);
             return null;
         }
 

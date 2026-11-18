@@ -117,7 +117,7 @@ namespace RevitMcpAddin.Handlers
                     var newIds = ElementTransformUtils.CopyElements(_doc, plainIds, new XYZ(dx, dy, dz));
                     foreach (var id in newIds)
                     {
-                        result.CreatedIds.Add(id.IntegerValue);
+                        result.CreatedIds.Add(id.Value);
                         RetargetLevel(_doc.GetElement(id), targetLevel);
                     }
                     result.CreatedCount += newIds.Count;
@@ -151,13 +151,13 @@ namespace RevitMcpAddin.Handlers
                                        List<FaceRef> faces, CopyElementsResult result)
         {
             var p = ElementHandler.GetPoint(src);
-            if (p == null) { result.Warnings.Add($"{src.Id.IntegerValue} 無放置點"); return false; }
+            if (p == null) { result.Warnings.Add($"{src.Id.Value} 無放置點"); return false; }
 
             double tx = p.X + dx, ty = p.Y + dy;
             var hit = FindFaceAt(faces, tx, ty);
             if (hit == null)
             {
-                result.Warnings.Add($"{src.Id.IntegerValue}（{src.Symbol.FamilyName}）目標位置無天花面");
+                result.Warnings.Add($"{src.Id.Value}（{src.Symbol.FamilyName}）目標位置無天花面");
                 return false;
             }
 
@@ -175,13 +175,13 @@ namespace RevitMcpAddin.Handlers
 
                 CopyCustomParams(src, inst);
 
-                result.CreatedIds.Add(inst.Id.IntegerValue);
+                result.CreatedIds.Add(inst.Id.Value);
                 result.CreatedCount++;
                 return true;
             }
             catch (Exception ex)
             {
-                result.Warnings.Add($"{src.Id.IntegerValue} 放置失敗：{ex.Message}");
+                result.Warnings.Add($"{src.Id.Value} 放置失敗：{ex.Message}");
                 return false;
             }
         }
@@ -293,11 +293,11 @@ namespace RevitMcpAddin.Handlers
         {
             if (req.SourceIds != null && req.SourceIds.Count > 0)
                 return req.SourceIds
-                    .Select(id => _doc.GetElement(new ElementId((int)id)))
+                    .Select(id => _doc.GetElement(ElementIdCompat.NewId(id)))
                     .Where(e => e != null).ToList()!;
 
             var collector = (req.SourceViewId.HasValue && req.SourceViewId.Value > 0)
-                ? new FilteredElementCollector(_doc, new ElementId((int)req.SourceViewId.Value))
+                ? new FilteredElementCollector(_doc, ElementIdCompat.NewId(req.SourceViewId.Value))
                       .WhereElementIsNotElementType()
                 : new FilteredElementCollector(_doc).WhereElementIsNotElementType();
 

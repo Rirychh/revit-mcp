@@ -83,13 +83,13 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 套用視圖樣板"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var v in views)
                 {
                     if (tpl != null && !v.IsValidViewTemplate(tpl.Id)) { warn.Add($"{v.Name}：樣板類型不符，略過"); continue; }
                     v.ViewTemplateId = tpl?.Id ?? ElementId.InvalidElementId;
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return Ok(new { applied = true, views = plan, warnings = warn });
         }
@@ -143,12 +143,12 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 品類可見性"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var t in targets.Values)
                     foreach (var c in cats)
                         if (t.target.CanCategoryBeHidden(c.Id)) t.target.SetCategoryHidden(c.Id, hidden);
                         else warn.Add($"{t.target.Name}：{c.Name} 不能隱藏");
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return Ok(new { applied = true, hidden, plan, warnings = warn });
         }
@@ -221,9 +221,9 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 3D 視圖顯示柱線"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var v in v3) v.ShowGridsOnLevels(next[v.Id.Value]);
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return Ok(new { applied = true, mode, views = plan, warnings = warn });
         }

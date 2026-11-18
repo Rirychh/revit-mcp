@@ -35,7 +35,7 @@ namespace RevitMcpAddin.Handlers
             bool includeGrouped = (bool?)r["includeGrouped"] ?? false;
             double tolDeg = (double?)r["tolDeg"] ?? 1.0;
 
-            var idList = (r["ids"] as JArray)?.Select(x => new ElementId((int)x)).ToList();
+            var idList = (r["ids"] as JArray)?.Select(x => ElementIdCompat.NewId((long)x)).ToList();
 
             List<FamilyInstance> targets;
             if (idList != null && idList.Count > 0)
@@ -52,22 +52,22 @@ namespace RevitMcpAddin.Handlers
 
             foreach (var fi in targets)
             {
-                int gid = (fi.GroupId != null && fi.GroupId != ElementId.InvalidElementId) ? fi.GroupId.IntegerValue : 0;
+                long gid = (fi.GroupId != null && fi.GroupId != ElementId.InvalidElementId) ? fi.GroupId.Value : 0;
                 string gname = gid != 0 ? _doc.GetElement(fi.GroupId)?.Name : null;
-                int gtid = 0; string gtname = null;
+                long gtid = 0; string gtname = null;
                 if (gid != 0)
                 {
                     try
                     {
                         var grp = _doc.GetElement(fi.GroupId) as Group;
-                        if (grp?.GroupType != null) { gtid = grp.GroupType.Id.IntegerValue; gtname = grp.GroupType.Name; }
+                        if (grp?.GroupType != null) { gtid = grp.GroupType.Id.Value; gtname = grp.GroupType.Name; }
                     }
                     catch { }
                 }
 
                 Transform t;
                 try { t = fi.GetTransform(); }
-                catch (Exception ex) { rows.Add(new { id = fi.Id.IntegerValue, groupId = gid, groupName = gname, status = "no-transform", note = ex.Message }); continue; }
+                catch (Exception ex) { rows.Add(new { id = fi.Id.Value, groupId = gid, groupName = gname, status = "no-transform", note = ex.Message }); continue; }
 
                 XYZ bx = t.BasisX, by = t.BasisY, bz = t.BasisZ;
                 XYZ origin = (fi.Location as LocationPoint)?.Point ?? t.Origin;
@@ -78,7 +78,7 @@ namespace RevitMcpAddin.Handlers
                 double tl = tgt.GetLength();
                 if (tl < 1e-6)
                 {
-                    rows.Add(new { id = fi.Id.IntegerValue, groupId = gid, groupName = gname, status = "horizontal-face",
+                    rows.Add(new { id = fi.Id.Value, groupId = gid, groupName = gname, status = "horizontal-face",
                                    basisX = D(bx), basisY = D(by), basisZ = D(bz), origin = V(origin) });
                     continue;
                 }
@@ -96,13 +96,13 @@ namespace RevitMcpAddin.Handlers
 
                 rows.Add(new
                 {
-                    id = fi.Id.IntegerValue,
+                    id = fi.Id.Value,
                     groupId = gid,
                     groupName = gname,
                     groupTypeId = gtid,
                     groupTypeName = gtname,
                     type = fi.Symbol?.Name,
-                    hostId = fi.Host?.Id.IntegerValue ?? 0,
+                    hostId = fi.Host?.Id.Value ?? 0,
                     basisX = D(bx), basisY = D(by), basisZ = D(bz),
                     origin = V(origin),
                     deviationDeg = Math.Round(angDeg, 2),
@@ -119,7 +119,7 @@ namespace RevitMcpAddin.Handlers
                     var pre = new RollbackOnError();
                     try
                     {
-                        using (var tx = new Transaction(_doc, "轉正 " + job.Item1.IntegerValue))
+                        using (var tx = new Transaction(_doc, "轉正 " + job.Item1.Value))
                         {
                             tx.Start();
                             var fo = tx.GetFailureHandlingOptions();
@@ -133,11 +133,11 @@ namespace RevitMcpAddin.Handlers
 
                             var st = tx.Commit();
                             if (st == TransactionStatus.Committed && !pre.HadError) done++;
-                            else blocked.Add(new { id = job.Item1.IntegerValue, status = st.ToString(),
+                            else blocked.Add(new { id = job.Item1.Value, status = st.ToString(),
                                                    reasons = pre.Errors.Distinct().Take(5).ToList() });
                         }
                     }
-                    catch (Exception ex) { errs.Add(job.Item1.IntegerValue + ": " + ex.Message); }
+                    catch (Exception ex) { errs.Add(job.Item1.Value + ": " + ex.Message); }
                 }
             }
 

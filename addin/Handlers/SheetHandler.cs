@@ -51,12 +51,12 @@ namespace RevitMcpAddin.Handlers
         {
             var list = new FilteredElementCollector(_doc).OfClass(typeof(ViewSheet)).Cast<ViewSheet>()
                 .Where(s => !s.IsPlaceholder).OrderBy(s => s.SheetNumber)
-                .Select(s => new { id = s.Id.IntegerValue, number = s.SheetNumber, name = s.Name }).ToList();
+                .Select(s => new { id = s.Id.Value, number = s.SheetNumber, name = s.Name }).ToList();
             var tbs = new FilteredElementCollector(_doc).OfClass(typeof(FamilySymbol))
                 .OfCategory(BuiltInCategory.OST_TitleBlocks).Cast<FamilySymbol>()
-                .Select(t => new { id = t.Id.IntegerValue, family = t.FamilyName, type = TypeName(t) }).ToList();
+                .Select(t => new { id = t.Id.Value, family = t.FamilyName, type = TypeName(t) }).ToList();
             var start = StartingViewSettings.GetStartingViewSettings(_doc).ViewId;
-            return Ok(new { count = list.Count, sheets = list, titleBlocks = tbs, startingViewId = start.IntegerValue });
+            return Ok(new { count = list.Count, sheets = list, titleBlocks = tbs, startingViewId = start.Value });
         }
 
         // ── POST /sheets/create ─────────────────────────────────────
@@ -87,7 +87,7 @@ namespace RevitMcpAddin.Handlers
             foreach (var jv in (r["views"] as JArray) ?? new JArray())
             {
                 long vid = (long?)jv["viewId"] ?? 0;
-                if (_doc.GetElement(new ElementId((int)vid)) is not View v) return Fail($"找不到視圖 {vid}。");
+                if (_doc.GetElement(ElementIdCompat.NewId(vid)) is not View v) return Fail($"找不到視圖 {vid}。");
                 views.Add((v, (double?)jv["x"] ?? 420, (double?)jv["y"] ?? 297));
             }
             bool setStart = (bool?)r["setStartingView"] ?? false;
@@ -100,7 +100,7 @@ namespace RevitMcpAddin.Handlers
             var placed = new List<object>();
             using (var tx = new Transaction(_doc, "MCP 建立圖紙"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 if (tb != null && !tb.IsActive) tb.Activate();
                 sheet = ViewSheet.Create(_doc, tb?.Id ?? ElementId.InvalidElementId);
                 sheet.SheetNumber = number;
@@ -110,12 +110,12 @@ namespace RevitMcpAddin.Handlers
                     if (!Viewport.CanAddViewToSheet(_doc, sheet.Id, v.Id))
                     { placed.Add(new { view = v.Name, ok = false, reason = "無法放置（可能已在其他圖紙）" }); continue; }
                     var vp = Viewport.Create(_doc, sheet.Id, v.Id, new XYZ(x / FT, y / FT, 0));
-                    placed.Add(new { view = v.Name, ok = true, viewportId = vp.Id.IntegerValue });
+                    placed.Add(new { view = v.Name, ok = true, viewportId = vp.Id.Value });
                 }
                 if (setStart) StartingViewSettings.GetStartingViewSettings(_doc).ViewId = sheet.Id;
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
-            return Ok(new { applied = true, sheetId = sheet.Id.IntegerValue, number, name, viewports = placed, setStartingView = setStart });
+            return Ok(new { applied = true, sheetId = sheet.Id.Value, number, name, viewports = placed, setStartingView = setStart });
         }
 
         // ── POST /sheets/starting-view { viewId | sheetNumber, apply } ──
@@ -125,14 +125,14 @@ namespace RevitMcpAddin.Handlers
             bool apply = (bool?)r["apply"] ?? false;
             View? v = null;
             if (r["sheetNumber"] != null) { SheetsByNumber().TryGetValue((string)r["sheetNumber"]!, out var s); v = s; }
-            else if (r["viewId"] != null) v = _doc.GetElement(new ElementId((int)(long)r["viewId"]!)) as View;
+            else if (r["viewId"] != null) v = _doc.GetElement(ElementIdCompat.NewId((long)r["viewId"]!)) as View;
             if (v == null) return Fail("找不到指定的視圖或圖紙。");
             var svs = StartingViewSettings.GetStartingViewSettings(_doc);
             if (!svs.IsAcceptableStartingView(v.Id)) return Fail($"「{v.Name}」不能設為開啟畫面。");
-            if (!apply) return Ok(new { applied = false, viewId = v.Id.IntegerValue, viewName = v.Name, currentId = svs.ViewId.IntegerValue });
+            if (!apply) return Ok(new { applied = false, viewId = v.Id.Value, viewName = v.Name, currentId = svs.ViewId.Value });
             using (var tx = new Transaction(_doc, "MCP 設定開啟畫面"))
-            { tx.Start(); svs.ViewId = v.Id; tx.Commit(); }
-            return Ok(new { applied = true, viewId = v.Id.IntegerValue, viewName = v.Name });
+            { TxGuard.Start(tx); svs.ViewId = v.Id; TxGuard.Commit(tx); }
+            return Ok(new { applied = true, viewId = v.Id.Value, viewName = v.Name });
         }
 
         // ── POST /sheets/export-pdf ─────────────────────────────────
@@ -224,14 +224,14 @@ namespace RevitMcpAddin.Handlers
             int count = 0;
             using (var tx = new Transaction(_doc, "MCP 圖框修正說明"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var (s, o, c, lines) in plan)
                     for (int i = 0; i < lines.Count; i++)
                     {
                         TextNote.Create(_doc, s.Id, new XYZ(o.X + c.x / FT, o.Y + (c.y - c.dy * i) / FT, 0), lines[i], tt.Id);
                         count++;
                     }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return Ok(new { applied = true, sheets = plan.Count, textNotes = count, skipped });
         }
@@ -258,12 +258,12 @@ namespace RevitMcpAddin.Handlers
         public string ListRevisions()
         {
             var clouds = new FilteredElementCollector(_doc).OfCategory(BuiltInCategory.OST_RevisionClouds)
-                .WhereElementIsNotElementType().Cast<RevisionCloud>().GroupBy(c => c.RevisionId.IntegerValue)
+                .WhereElementIsNotElementType().Cast<RevisionCloud>().GroupBy(c => c.RevisionId.Value)
                 .ToDictionary(g => g.Key, g => g.Count());
             var list = new FilteredElementCollector(_doc).OfClass(typeof(Revision)).Cast<Revision>()
                 .OrderBy(x => x.SequenceNumber)
-                .Select(x => new { id = x.Id.IntegerValue, sequence = x.SequenceNumber, description = x.Description,
-                                   date = x.RevisionDate, clouds = clouds.TryGetValue(x.Id.IntegerValue, out var n) ? n : 0 }).ToList();
+                .Select(x => new { id = x.Id.Value, sequence = x.SequenceNumber, description = x.Description,
+                                   date = x.RevisionDate, clouds = clouds.TryGetValue(x.Id.Value, out var n) ? n : 0 }).ToList();
             return Ok(new { count = list.Count, revisions = list });
         }
 
@@ -275,17 +275,17 @@ namespace RevitMcpAddin.Handlers
             var r = Parse(body);
             bool apply = (bool?)r["apply"] ?? false;
             long revId = (long?)r["revisionId"] ?? 0;
-            if (_doc.GetElement(new ElementId((int)revId)) is not Revision rev) return Fail($"找不到修訂 {revId}。用 GET /revisions 查。");
+            if (_doc.GetElement(ElementIdCompat.NewId(revId)) is not Revision rev) return Fail($"找不到修訂 {revId}。用 GET /revisions 查。");
             var tt = PickTextType((string?)r["textTypeName"], Naming.RevisionCloudTextType);
             if (tt == null) return Fail("找不到文字類型。");
             double offMm = (double?)r["offsetMm"] ?? 4;
             var notes = new Dictionary<string, string>();
             if (r["notes"] is JObject jn) foreach (var p in jn.Properties()) notes[p.Name] = (string?)p.Value ?? "";
 
-            var viewSheet = new Dictionary<int, string>();
+            var viewSheet = new Dictionary<long, string>();
             foreach (var vp in new FilteredElementCollector(_doc).OfClass(typeof(Viewport)).Cast<Viewport>())
-                if (_doc.GetElement(vp.SheetId) is ViewSheet sh && !viewSheet.ContainsKey(vp.ViewId.IntegerValue))
-                    viewSheet[vp.ViewId.IntegerValue] = sh.SheetNumber;
+                if (_doc.GetElement(vp.SheetId) is ViewSheet sh && !viewSheet.ContainsKey(vp.ViewId.Value))
+                    viewSheet[vp.ViewId.Value] = sh.SheetNumber;
 
             var clouds = new FilteredElementCollector(_doc).OfCategory(BuiltInCategory.OST_RevisionClouds)
                 .WhereElementIsNotElementType().Cast<RevisionCloud>().Where(c => c.RevisionId == rev.Id).ToList();
@@ -296,7 +296,7 @@ namespace RevitMcpAddin.Handlers
                 if (_doc.GetElement(c.OwnerViewId) is not View v) continue;
                 var cp = c.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
                 if (!string.IsNullOrWhiteSpace(cp?.AsString())) { skipped.Add($"{v.Name}：已標註過"); continue; }
-                string? num = v is ViewSheet vs ? vs.SheetNumber : (viewSheet.TryGetValue(v.Id.IntegerValue, out var nn) ? nn : null);
+                string? num = v is ViewSheet vs ? vs.SheetNumber : (viewSheet.TryGetValue(v.Id.Value, out var nn) ? nn : null);
                 if (num == null) { skipped.Add($"{v.Name}：視圖未放在圖紙上"); continue; }
                 if (!notes.TryGetValue(num, out var note) || note == "") { skipped.Add($"{num}（{v.Name}）：圖號不在清單"); continue; }
                 var bb = c.get_BoundingBox(v);
@@ -305,12 +305,12 @@ namespace RevitMcpAddin.Handlers
             }
             if (!apply)
                 return Ok(new { applied = false, revision = rev.Description, clouds = clouds.Count, toAnnotate = plan.Count,
-                                items = plan.Select(p => new { cloudId = p.c.Id.IntegerValue, view = p.v.Name, note = p.note }).ToList(), skipped });
+                                items = plan.Select(p => new { cloudId = p.c.Id.Value, view = p.v.Name, note = p.note }).ToList(), skipped });
 
             var created = new List<object>();
             using (var tx = new Transaction(_doc, "MCP 雲形線變更標註"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var (c, v, note, bb) in plan)
                 {
                     int scale = v is ViewSheet ? 1 : Math.Max(1, v.Scale);
@@ -323,9 +323,9 @@ namespace RevitMcpAddin.Handlers
                     ld.End = corner;
                     var cp = c.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
                     if (cp != null && !cp.IsReadOnly) cp.Set(note);
-                    created.Add(new { cloudId = c.Id.IntegerValue, textNoteId = tn.Id.IntegerValue, view = v.Name });
+                    created.Add(new { cloudId = c.Id.Value, textNoteId = tn.Id.Value, view = v.Name });
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return Ok(new { applied = true, annotated = created.Count, items = created, skipped });
         }

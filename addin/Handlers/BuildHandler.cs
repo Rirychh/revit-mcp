@@ -71,11 +71,11 @@ namespace RevitMcpAddin.Handlers
                 {
                     var fid = ResolveLengthUnit(req.LengthUnit!);
                     using var tu = new Transaction(nd, "MCP 設定長度單位");
-                    tu.Start();
+                    TxGuard.Start(tu);
                     var units = nd.GetUnits();
                     units.SetFormatOptions(SpecTypeId.Length, new FormatOptions(fid));
                     nd.SetUnits(units);
-                    tu.Commit();
+                    TxGuard.Commit(tu);
                     unitUsed = req.LengthUnit!;
                 }
 
@@ -158,7 +158,7 @@ namespace RevitMcpAddin.Handlers
                 var dup = existing.FirstOrDefault(e => Math.Abs(ToMm(e.Elevation) - spec.ElevationMm) < 0.5);
                 if (dup != null && req.SkipExisting)
                 {
-                    result.Skipped.Add($"{label}：同高度已有標高「{dup.Name}」(id {dup.Id.IntegerValue})");
+                    result.Skipped.Add($"{label}：同高度已有標高「{dup.Name}」(id {dup.Id.Value})");
                     continue;
                 }
 
@@ -176,7 +176,7 @@ namespace RevitMcpAddin.Handlers
                 existing.Add(lv);
                 result.Levels.Add(new LevelDto
                 {
-                    Id = lv.Id.IntegerValue, Name = lv.Name, Elevation = ToMm(lv.Elevation)
+                    Id = lv.Id.Value, Name = lv.Name, Elevation = ToMm(lv.Elevation)
                 });
             }
 
@@ -242,7 +242,7 @@ namespace RevitMcpAddin.Handlers
                     try { if (wt.Kind == WallKind.Basic) w = Math.Round(ToMm(wt.Width), 1); } catch { }
                     list.Add(new BuildTypeDto
                     {
-                        Id = wt.Id.IntegerValue, Family = wt.FamilyName,
+                        Id = wt.Id.Value, Family = wt.FamilyName,
                         Name = wt.Name, Kind = wt.Kind.ToString(), WidthMm = w
                     });
                 }
@@ -253,13 +253,13 @@ namespace RevitMcpAddin.Handlers
                                        .Cast<FloorType>().OrderBy(f => f.Name))
                 {
                     if (ft.Category == null ||
-                        ft.Category.Id.IntegerValue != (int)BuiltInCategory.OST_Floors) continue;
+                        ft.Category.Id.Value != (int)BuiltInCategory.OST_Floors) continue;
                     double? w = null;
                     try { var cs = ft.GetCompoundStructure(); if (cs != null) w = Math.Round(ToMm(cs.GetWidth()), 1); }
                     catch { }
                     list.Add(new BuildTypeDto
                     {
-                        Id = ft.Id.IntegerValue, Family = ft.FamilyName,
+                        Id = ft.Id.Value, Family = ft.FamilyName,
                         Name = ft.Name, Kind = "Floor", WidthMm = w
                     });
                 }
@@ -335,7 +335,7 @@ namespace RevitMcpAddin.Handlers
                         var wtId = wt?.Id ?? doc.GetDefaultElementTypeId(ElementTypeGroup.WallType);
                         var w = Wall.Create(doc, line, wtId, level.Id,
                                             Mm(req.HeightMm), Mm(req.BaseOffsetMm), false, req.Structural);
-                        result.Ids.Add(w.Id.IntegerValue);
+                        result.Ids.Add(w.Id.Value);
                     }
                     catch (Exception ex)
                     { result.Skipped.Add($"loop {li} 第 {i + 1} 段：{ex.Message}"); }
@@ -359,7 +359,7 @@ namespace RevitMcpAddin.Handlers
             var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().ToList();
             var floorTypes = new FilteredElementCollector(doc).OfClass(typeof(FloorType)).Cast<FloorType>()
                 .Where(f => f.Category != null &&
-                            f.Category.Id.IntegerValue == (int)BuiltInCategory.OST_Floors).ToList();
+                            f.Category.Id.Value == (int)BuiltInCategory.OST_Floors).ToList();
             if (floorTypes.Count == 0)
                 throw new InvalidOperationException("這個模型裡沒有可用的樓板型別。");
 
@@ -444,7 +444,7 @@ namespace RevitMcpAddin.Handlers
                         var p = fl.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM);
                         if (p != null && !p.IsReadOnly) p.Set(Mm(f.HeightOffsetMm));
                     }
-                    result.Ids.Add(fl.Id.IntegerValue);
+                    result.Ids.Add(fl.Id.Value);
                     result.Openings += nopen;
                 }
                 catch (Exception ex) { result.Skipped.Add($"{f.LevelName}：{ex.Message}"); }
@@ -467,7 +467,7 @@ namespace RevitMcpAddin.Handlers
 
             var doc = Doc;
             var result = new CreateColumnsResult();
-            var catId = new ElementId((int)BuiltInCategory.OST_StructuralColumns);
+            var catId = new ElementId(BuiltInCategory.OST_StructuralColumns);
 
             using var tx = new Transaction(doc, "MCP 建立圓柱");
             tx.Start();
@@ -494,7 +494,7 @@ namespace RevitMcpAddin.Handlers
                     ds.ApplicationId     = "RevitMCP";
                     ds.ApplicationDataId = "column";
                     ds.SetShape(new List<GeometryObject> { solid });
-                    result.Ids.Add(ds.Id.IntegerValue);
+                    result.Ids.Add(ds.Id.Value);
                 }
                 catch (Exception ex) { result.Skipped.Add($"第 {i} 支：{ex.Message}"); }
             }

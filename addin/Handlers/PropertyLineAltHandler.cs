@@ -93,7 +93,7 @@ namespace RevitMcpAddin.Handlers
             string comment = $"{tag}面積={areaM2:0.00}㎡|周長={perimM:0.00}m";
 
             using var tx = new Transaction(_doc, $"MCP 地界線（替代）{name}");
-            tx.Start();
+            TxGuard.Start(tx);
             SwallowAll(tx);
 
             // 3) 刪除同名舊地界線
@@ -142,7 +142,7 @@ namespace RevitMcpAddin.Handlers
                 mc.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(comment);
                 ids.Add(mc.Id);
             }
-            result.CurveIds = ids.Select(i => (long)i.IntegerValue).ToList();
+            result.CurveIds = ids.Select(i => (long)i.Value).ToList();
 
             // 6) 模型群組
             if (req.Group)
@@ -156,13 +156,13 @@ namespace RevitMcpAddin.Handlers
                     string n2 = gname; int k = 2;
                     while (taken.Contains(n2)) n2 = $"{gname}_{k++}";
                     grp.GroupType.Name = n2;
-                    result.GroupId   = grp.Id.IntegerValue;
+                    result.GroupId   = grp.Id.Value;
                     result.GroupName = n2;
                 }
                 catch (Exception ex) { result.Warnings.Add("群組建立失敗：" + ex.Message); }
             }
 
-            tx.Commit();
+            TxGuard.Commit(tx);
             result.Applied = true;
             return JsonConvert.SerializeObject(ApiResponse<PropertyLineAltResult>.Ok(result));
         }

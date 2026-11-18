@@ -58,7 +58,7 @@ namespace RevitMcpAddin.Handlers
                             || s.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
                 .Select(s => new TagTypeDto
                 {
-                    Id         = s.Id.IntegerValue,
+                    Id         = s.Id.Value,
                     FamilyName = s.FamilyName,
                     TypeName   = s.Name,
                     Category   = s.Category!.Name
@@ -74,7 +74,7 @@ namespace RevitMcpAddin.Handlers
         {
             if (!long.TryParse(qs["viewId"], out var vid))
                 return Fail<ViewAnnotationsResult>("需要 viewId 參數。");
-            if (_doc.GetElement(new ElementId((int)vid)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(vid)) is not View view)
                 return Fail<ViewAnnotationsResult>($"View {vid} not found.");
 
             var res = new ViewAnnotationsResult { ViewId = vid, ViewName = view.Name };
@@ -85,7 +85,7 @@ namespace RevitMcpAddin.Handlers
                 var sym = _doc.GetElement(t.GetTypeId()) as FamilySymbol;
                 var dto = new ViewTagDto
                 {
-                    TagId      = t.Id.IntegerValue,
+                    TagId      = t.Id.Value,
                     Category   = t.Category?.Name ?? "",
                     FamilyName = sym?.FamilyName ?? "",
                     TypeName   = sym?.Name ?? "",
@@ -98,7 +98,7 @@ namespace RevitMcpAddin.Handlers
                     var linked = r.LinkedElementId;
                     if (linked != null && linked != ElementId.InvalidElementId)
                     {
-                        dto.TaggedIds.Add(linked.IntegerValue);
+                        dto.TaggedIds.Add(linked.Value);
                         var li = _doc.GetElement(r.ElementId) as RevitLinkInstance;
                         var ld = li?.GetLinkDocument();
                         var le = ld?.GetElement(linked);
@@ -106,7 +106,7 @@ namespace RevitMcpAddin.Handlers
                     }
                     else
                     {
-                        dto.TaggedIds.Add(r.ElementId.IntegerValue);
+                        dto.TaggedIds.Add(r.ElementId.Value);
                         var he = _doc.GetElement(r.ElementId);
                         dto.TaggedNames.Add(he != null ? SafeName(he) : "");
                     }
@@ -119,7 +119,7 @@ namespace RevitMcpAddin.Handlers
             {
                 var dto = new ViewDimDto
                 {
-                    DimensionId = d.Id.IntegerValue,
+                    DimensionId = d.Id.Value,
                     TypeName    = (_doc.GetElement(d.GetTypeId()) as ElementType)?.Name ?? "",
                     Category    = d.Category?.Name ?? ""
                 };
@@ -141,7 +141,7 @@ namespace RevitMcpAddin.Handlers
                 double k = view.Scale > 0 ? view.Scale : 1;   // 模型單位 → 圖面 mm
                 res.TextNotes.Add(new ViewTextDto
                 {
-                    TextNoteId = n.Id.IntegerValue,
+                    TextNoteId = n.Id.Value,
                     TypeName   = (_doc.GetElement(n.GetTypeId()) as ElementType)?.Name ?? "",
                     Text       = n.Text?.Trim() ?? "",
                     X          = Math.Round(n.Coord.X * FT / k, 1),
@@ -158,7 +158,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<DeleteTagsRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<DeleteTagsResult>($"View {req.ViewId} not found.");
 
             var res = new DeleteTagsResult
@@ -175,7 +175,7 @@ namespace RevitMcpAddin.Handlers
 
                 if (req.TagIds != null && req.TagIds.Count > 0)
                 {
-                    if (!req.TagIds.Contains(t.Id.IntegerValue)) continue;
+                    if (!req.TagIds.Contains(t.Id.Value)) continue;
                 }
                 else
                 {
@@ -183,7 +183,7 @@ namespace RevitMcpAddin.Handlers
                     if (!string.IsNullOrEmpty(req.TagTypeName)   && typ != req.TagTypeName)   continue;
                     if (req.BlankTextOnly && txt.Length > 0) continue;
                 }
-                victims.Add((t, $"[{t.Id.IntegerValue}] {fam} : {typ} '{txt}'"));
+                victims.Add((t, $"[{t.Id.Value}] {fam} : {typ} '{txt}'"));
             }
 
             res.Matched = victims.Select(v => v.label).ToList();
@@ -191,13 +191,13 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 刪除視圖標籤"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var v in victims)
                 {
                     try { _doc.Delete(v.tag.Id); res.Deleted++; }
                     catch (Exception ex) { res.Failed.Add($"{v.label} → {ex.Message}"); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<DeleteTagsResult>.Ok(res));
         }
@@ -208,7 +208,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<TagElementsRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<TagElementsResult>($"View {req.ViewId} not found.");
             if (view.IsTemplate)
                 return Fail<TagElementsResult>("視圖樣板不能放標籤。");
@@ -279,13 +279,13 @@ namespace RevitMcpAddin.Handlers
                     if (c == null)
                     {
                         result.Skipped.Add(new SkippedDto
-                        { ElementId = t.El.Id.IntegerValue, Reason = "視圖內取不到範圍框" });
+                        { ElementId = t.El.Id.Value, Reason = "視圖內取不到範圍框" });
                         continue;
                     }
-                    var pt = heads.TryGetValue(t.El.Id.IntegerValue, out var h0) ? h0 : c + delta;
+                    var pt = heads.TryGetValue(t.El.Id.Value, out var h0) ? h0 : c + delta;
                     result.Placed.Add(new TagPlacementDto
                     {
-                        ElementId   = t.El.Id.IntegerValue,
+                        ElementId   = t.El.Id.Value,
                         ElementName = SafeName(t.El),
                         Category    = t.El.Category?.Name ?? "",
                         Source      = t.Source,
@@ -299,7 +299,7 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 放置設備標籤"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 if (tagSymbol != null && !tagSymbol.IsActive) tagSymbol.Activate();
 
                 foreach (var t in targets)
@@ -310,11 +310,11 @@ namespace RevitMcpAddin.Handlers
                         if (c == null)
                         {
                             result.Skipped.Add(new SkippedDto
-                            { ElementId = t.El.Id.IntegerValue, Reason = "視圖內取不到範圍框" });
+                            { ElementId = t.El.Id.Value, Reason = "視圖內取不到範圍框" });
                             continue;
                         }
                         // 分邊排版時 pt 就是標籤頭的位置，引線由 Revit 自動接回元件。
-                        var pt = heads.TryGetValue(t.El.Id.IntegerValue, out var h1) ? h1 : c + delta;
+                        var pt = heads.TryGetValue(t.El.Id.Value, out var h1) ? h1 : c + delta;
 
                         // 連結裡的元件要用 link reference，否則 Revit 不知道標的在哪個連結
                         var rf = t.Link != null
@@ -332,11 +332,11 @@ namespace RevitMcpAddin.Handlers
 
                         result.Placed.Add(new TagPlacementDto
                         {
-                            ElementId   = t.El.Id.IntegerValue,
+                            ElementId   = t.El.Id.Value,
                             ElementName = SafeName(t.El),
                             Category    = t.El.Category?.Name ?? "",
                             Source      = t.Source,
-                            TagId       = tag.Id.IntegerValue,
+                            TagId       = tag.Id.Value,
                             TagText     = txt,
                             X = pt.X * FT, Y = pt.Y * FT, Z = pt.Z * FT
                         });
@@ -344,10 +344,10 @@ namespace RevitMcpAddin.Handlers
                     catch (Exception ex)
                     {
                         result.Skipped.Add(new SkippedDto
-                        { ElementId = t.El.Id.IntegerValue, Reason = ex.Message });
+                        { ElementId = t.El.Id.Value, Reason = ex.Message });
                     }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
 
             return JsonConvert.SerializeObject(ApiResponse<TagElementsResult>.Ok(result));
@@ -359,7 +359,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<DimensionRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<DimensionResult>($"View {req.ViewId} not found.");
             if (view.IsTemplate)
                 return Fail<DimensionResult>("視圖樣板不能加尺寸標註。");
@@ -390,7 +390,7 @@ namespace RevitMcpAddin.Handlers
 
             foreach (var id in req.ElementIds)
             {
-                var el = _doc.GetElement(new ElementId((int)id));
+                var el = _doc.GetElement(ElementIdCompat.NewId(id));
                 if (el == null)
                 {
                     result.Skipped.Add(new SkippedDto { ElementId = id, Reason = "元件不存在" });
@@ -495,13 +495,13 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 建立尺寸鏈"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 var line = Line.CreateBound(p1, p2);
                 var dim  = dimType != null
                     ? _doc.Create.NewDimension(view, line, refArray, dimType)
                     : _doc.Create.NewDimension(view, line, refArray);
-                tx.Commit();
-                result.DimensionId = dim.Id.IntegerValue;
+                TxGuard.Commit(tx);
+                result.DimensionId = dim.Id.Value;
             }
 
             return JsonConvert.SerializeObject(ApiResponse<DimensionResult>.Ok(result));
@@ -514,13 +514,13 @@ namespace RevitMcpAddin.Handlers
 
             if (req.ElementIds != null && req.ElementIds.Count > 0)
             {
-                var visible = new HashSet<int>(new FilteredElementCollector(_doc, view.Id)
+                var visible = new HashSet<long>(new FilteredElementCollector(_doc, view.Id)
                     .WhereElementIsNotElementType()
-                    .ToElementIds().Select(i => i.IntegerValue));
+                    .ToElementIds().Select(i => i.Value));
 
                 foreach (var id in req.ElementIds)
                 {
-                    var el = _doc.GetElement(new ElementId((int)id));
+                    var el = _doc.GetElement(ElementIdCompat.NewId(id));
                     if (el == null)
                     { result.Skipped.Add(new SkippedDto { ElementId = id, Reason = "元件不存在" }); continue; }
                     if (!visible.Contains((int)id))
@@ -561,7 +561,7 @@ namespace RevitMcpAddin.Handlers
                 if (ldoc == null)
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = li.Id.IntegerValue, Reason = "連結未載入，跳過" });
+                    { ElementId = li.Id.Value, Reason = "連結未載入，跳過" });
                     continue;
                 }
 
@@ -585,7 +585,7 @@ namespace RevitMcpAddin.Handlers
                     catch (Exception ex)
                     {
                         result.Skipped.Add(new SkippedDto
-                        { ElementId = li.Id.IntegerValue, Reason = $"{ldoc.Title}：搜尋失敗 {ex.Message}" });
+                        { ElementId = li.Id.Value, Reason = $"{ldoc.Title}：搜尋失敗 {ex.Message}" });
                         continue;
                     }
                     foreach (var e in found)
@@ -610,7 +610,7 @@ namespace RevitMcpAddin.Handlers
 
             if (req.SeedElementId.HasValue)
             {
-                var seed = _doc.GetElement(new ElementId((int)req.SeedElementId.Value));
+                var seed = _doc.GetElement(ElementIdCompat.NewId(req.SeedElementId.Value));
                 if (seed == null)
                 {
                     result.Skipped.Add(new SkippedDto
@@ -685,7 +685,7 @@ namespace RevitMcpAddin.Handlers
                 if (sp == null)
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = t.El.Id.IntegerValue, Reason = "取不到範圍框" });
+                    { ElementId = t.El.Id.Value, Reason = "取不到範圍框" });
                     continue;
                 }
                 var (eXMin, eXMax, eDMin, eDMax) = sp.Value;
@@ -703,7 +703,7 @@ namespace RevitMcpAddin.Handlers
                     bool xOut = cx < sMinX - tolX || cx > sMaxX + tolX;
                     result.Skipped.Add(new SkippedDto
                     {
-                        ElementId = t.El.Id.IntegerValue,
+                        ElementId = t.El.Id.Value,
                         Reason = xOut
                             ? $"{SafeName(t.El)}：水平超出這一間的範圍，也沒有蓋住這一間"
                             : $"{SafeName(t.El)}：深度落在 {Math.Round(nearD * FT)}~{Math.Round(farD * FT)}mm 之外，屬於別間"
@@ -769,7 +769,7 @@ namespace RevitMcpAddin.Handlers
                 double y = it.y;
                 if (prev != double.MinValue && y < prev + spacing) y = prev + spacing;
                 prev = y;
-                heads[it.t.El.Id.IntegerValue] =
+                heads[it.t.El.Id.Value] =
                     right.Multiply(headX) + up.Multiply(y) + dir.Multiply(it.d);
             }
         }
@@ -812,7 +812,7 @@ namespace RevitMcpAddin.Handlers
             foreach (var t in targets)
             {
                 string mark = MarkOf(t.El);
-                if (string.IsNullOrWhiteSpace(mark)) mark = $"#{t.El.Id.IntegerValue}";
+                if (string.IsNullOrWhiteSpace(mark)) mark = $"#{t.El.Id.Value}";
 
                 var sp = SpanInView(t, view);
                 double depth = sp.HasValue ? (sp.Value.dMin + sp.Value.dMax) * 0.5 : double.MinValue;
@@ -821,13 +821,13 @@ namespace RevitMcpAddin.Handlers
                 else if (depth > cur.depth)
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = cur.t.El.Id.IntegerValue, Reason = $"{mark}：同編號已有更靠背牆的元件，只放一個" });
+                    { ElementId = cur.t.El.Id.Value, Reason = $"{mark}：同編號已有更靠背牆的元件，只放一個" });
                     best[mark] = (t, depth);
                 }
                 else
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = t.El.Id.IntegerValue, Reason = $"{mark}：同編號只放一個，已取更靠背牆的那個" });
+                    { ElementId = t.El.Id.Value, Reason = $"{mark}：同編號只放一個，已取更靠背牆的那個" });
                 }
             }
             return order.Select(m => best[m].t).ToList();
@@ -850,13 +850,13 @@ namespace RevitMcpAddin.Handlers
                 if (inc != null && !inc.IsMatch(mark))
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = t.El.Id.IntegerValue, Reason = $"編號「{mark}」不符 markInclude" });
+                    { ElementId = t.El.Id.Value, Reason = $"編號「{mark}」不符 markInclude" });
                     continue;
                 }
                 if (exc != null && exc.IsMatch(mark))
                 {
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = t.El.Id.IntegerValue, Reason = $"編號「{mark}」符合 markExclude，屬於另一種標籤" });
+                    { ElementId = t.El.Id.Value, Reason = $"編號「{mark}」符合 markExclude，屬於另一種標籤" });
                     continue;
                 }
                 kept.Add(t);
@@ -898,7 +898,7 @@ namespace RevitMcpAddin.Handlers
                 if (string.IsNullOrWhiteSpace(mark))
                     result.Skipped.Add(new SkippedDto
                     {
-                        ElementId = t.El.Id.IntegerValue,
+                        ElementId = t.El.Id.Value,
                         Reason = $"{SafeName(t.El)}：類型標記是空的，需要先在族群類型補編號"
                     });
                 else kept.Add(t);
@@ -918,9 +918,9 @@ namespace RevitMcpAddin.Handlers
                     foreach (var r in t.GetTaggedReferences())
                     {
                         if (r.LinkedElementId != null && r.LinkedElementId != ElementId.InvalidElementId)
-                            tagged.Add($"{r.ElementId.IntegerValue}:{r.LinkedElementId.IntegerValue}");
+                            tagged.Add($"{r.ElementId.Value}:{r.LinkedElementId.Value}");
                         else
-                            tagged.Add($"0:{r.ElementId.IntegerValue}");
+                            tagged.Add($"0:{r.ElementId.Value}");
                     }
                 }
                 catch { /* 讀不到就略過，最多重複標一次 */ }
@@ -929,10 +929,10 @@ namespace RevitMcpAddin.Handlers
             var kept = new List<TagTarget>();
             foreach (var t in targets)
             {
-                var key = $"{(t.Link != null ? t.Link.Id.IntegerValue : 0)}:{t.El.Id.IntegerValue}";
+                var key = $"{(t.Link != null ? t.Link.Id.Value : 0)}:{t.El.Id.Value}";
                 if (tagged.Contains(key))
                     result.Skipped.Add(new SkippedDto
-                    { ElementId = t.El.Id.IntegerValue, Reason = $"已有標籤（{t.Source}）" });
+                    { ElementId = t.El.Id.Value, Reason = $"已有標籤（{t.Source}）" });
                 else kept.Add(t);
             }
             return kept;

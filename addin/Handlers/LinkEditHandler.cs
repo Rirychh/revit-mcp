@@ -113,9 +113,9 @@ namespace RevitMcpAddin.Handlers
                 var targets = Collect(ed).Select(e => e.Id).ToList();
                 using (var tx = new Transaction(ed, "MCP 刪除連結檔元件"))
                 {
-                    tx.Start();
+                    TxGuard.Start(tx);
                     foreach (var id in targets) { try { ed.Delete(id); deleted++; } catch (Exception ex) { notes.Add($"{id.Value}: {ex.Message}"); } }
-                    tx.Commit();
+                    TxGuard.Commit(tx);
                 }
                 ed.Save();
                 notes.Add($"已存檔 {ed.Title}");

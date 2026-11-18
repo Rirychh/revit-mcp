@@ -125,7 +125,7 @@ namespace RevitMcpAddin.Handlers
                         }
                         changed++;
                     }
-                    catch (Exception ex) { failed++; if (errs.Count < 10) errs.Add($"{ds.Id.IntegerValue}: {ex.Message}"); }
+                    catch (Exception ex) { failed++; if (errs.Count < 10) errs.Add($"{ds.Id.Value}: {ex.Message}"); }
                     if (i % 100 == 0) Log($"{i}/{dss.Count} changed={changed} skipped={skipped} failed={failed} {sw.Elapsed.TotalSeconds:F0}s");
                 }
                 Log($"directshape done changed={changed} {sw.Elapsed.TotalSeconds:F0}s");
@@ -359,10 +359,10 @@ namespace RevitMcpAddin.Handlers
 #if REVIT2024_OR_GREATER
             foreach (var tp in new FilteredElementCollector(doc).OfClass(typeof(Toposolid)).Cast<Toposolid>().ToList())
             {
-                int oldId = tp.Id.IntegerValue;
+                long oldId = tp.Id.Value;
                 var ed = tp.GetSlabShapeEditor();
                 var P = ed.SlabShapeVertices.Cast<SlabShapeVertex>().Select(v => v.Position).ToList();
-                if (P.Count < 50) { outList.Add(new { id = tp.Id.IntegerValue, before = P.Count, skipped = true }); continue; }
+                if (P.Count < 50) { outList.Add(new { id = tp.Id.Value, before = P.Count, skipped = true }); continue; }
                 double x0 = P.Min(p => p.X), y0 = P.Min(p => p.Y), x1 = P.Max(p => p.X), y1 = P.Max(p => p.Y);
                 double cell = cellM / 0.3048, edgeTol = 1.0 / 0.3048;
                 var best = new Dictionary<(int, int), (double, XYZ)>();
@@ -378,7 +378,7 @@ namespace RevitMcpAddin.Handlers
                 foreach (var v in best.Values) Add(v.Item2);
                 foreach (var p in P)
                     if (Math.Abs(p.X - x0) < edgeTol || Math.Abs(p.X - x1) < edgeTol || Math.Abs(p.Y - y0) < edgeTol || Math.Abs(p.Y - y1) < edgeTol) Add(p);
-                int newId = 0;
+                long newId = 0;
                 if (apply)
                 {
                     var lvl = tp.LevelId;
@@ -388,7 +388,7 @@ namespace RevitMcpAddin.Handlers
                     var c0 = tp.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
                     if (!string.IsNullOrEmpty(c0)) nt.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(c0);
                     doc.Delete(tp.Id);
-                    newId = nt.Id.IntegerValue;
+                    newId = nt.Id.Value;
                 }
                 outList.Add(new { id = oldId, before = P.Count, after = keep.Count, newId });
             }
@@ -422,7 +422,7 @@ namespace RevitMcpAddin.Handlers
                     .FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
                 if (existing != null)
                 {
-                    try { existing.Reload(); results.Add(new { file = name, action = "reloaded", typeId = existing.Id.IntegerValue }); }
+                    try { existing.Reload(); results.Add(new { file = name, action = "reloaded", typeId = existing.Id.Value }); }
                     catch (Exception ex) { results.Add(new { file = name, action = "exists", error = ex.Message }); }
                     continue;
                 }
@@ -439,7 +439,7 @@ namespace RevitMcpAddin.Handlers
                 {
                     var el = doc.GetElement(id); if (el != null) el.Pinned = true;
                 }
-                results.Add(new { file = name, action = ok ? "linked" : "failed", instanceId = id.IntegerValue });
+                results.Add(new { file = name, action = ok ? "linked" : "failed", instanceId = id.Value });
             }
             var st = t.Commit();
             return Ok(new { document = doc.Title, view = view.Name, level = view.GenLevel.Name, status = st.ToString(), results, failures = pp.Notes });
@@ -472,17 +472,17 @@ namespace RevitMcpAddin.Handlers
                 }
                 rows.Add((ds, did, nm, cm, ds.Category?.Name ?? "", cx, cy, z0, z1));
             }
-            var list = rows.Take(req.Limit).Select(r => new { id = r.ds.Id.IntegerValue, dataId = r.dataId, name = r.name, comment = r.cmt, category = r.cat,
+            var list = rows.Take(req.Limit).Select(r => new { id = r.ds.Id.Value, dataId = r.dataId, name = r.name, comment = r.cmt, category = r.cat,
                 cx = Math.Round(r.cx), cy = Math.Round(r.cy), zMin = Math.Round(r.zmin), zMax = Math.Round(r.zmax) }).ToList();
             var byComment = rows.GroupBy(r => r.cmt.Length > 40 ? r.cmt.Substring(0, 40) : r.cmt).ToDictionary(g => g.Key, g => g.Count());
             int deleted = 0;
             if (req.Apply && rows.Count > 0)
             {
                 using var t = new Transaction(doc, "MCP 刪除 DirectShape");
-                t.Start();
+                TxGuard.Start(t);
                 var ids = rows.Select(r => r.ds.Id).ToList();
                 deleted = doc.Delete(ids).Count;
-                t.Commit();
+                TxGuard.Commit(t);
             }
             return Ok(new { applied = req.Apply, totalDirectShapes = all.Count, matched = rows.Count, deleted, byComment, elements = list });
         }
@@ -556,7 +556,7 @@ namespace RevitMcpAddin.Handlers
                         if (geo == null || geo.Count == 0) { failed++; continue; }
                         ds.SetShape(geo); done++;
                     }
-                    catch (Exception ex) { failed++; if (errs.Count < 8) errs.Add($"{ds.Id.IntegerValue}: {ex.Message}"); }
+                    catch (Exception ex) { failed++; if (errs.Count < 8) errs.Add($"{ds.Id.Value}: {ex.Message}"); }
                     if (i % 200 == 0) Log($"mat {i}/{plan.Count} done={done} failed={failed}");
                 }
                 if (req.TopoMaterial != null && !string.IsNullOrEmpty(req.TopoMaterial.Material))
@@ -571,11 +571,11 @@ namespace RevitMcpAddin.Handlers
                         {
                             var tt = doc.GetElement(tid) as HostObjAttributes;
                             var cs = tt?.GetCompoundStructure();
-                            if (cs == null) { notes.Add($"{tid.IntegerValue}: no structure"); continue; }
+                            if (cs == null) { notes.Add($"{tid.Value}: no structure"); continue; }
                             for (int k = 0; k < cs.LayerCount; k++) cs.SetMaterialId(k, mid);
                             tt!.SetCompoundStructure(cs); notes.Add($"{tt.Name}: {cs.LayerCount} layers");
                         }
-                        catch (Exception ex) { notes.Add($"{tid.IntegerValue}: {ex.Message}"); }
+                        catch (Exception ex) { notes.Add($"{tid.Value}: {ex.Message}"); }
                     }
                     topo = notes;
 #else

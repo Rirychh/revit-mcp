@@ -31,9 +31,9 @@ namespace RevitMcpAddin.Handlers
             var rows = new List<object>();
             var targets = new List<Group>();
 
-            foreach (var x in arr.Select(v => (int)v).Distinct())
+            foreach (var x in arr.Select(v => (long)v).Distinct())
             {
-                var el = _doc.GetElement(new ElementId(x));
+                var el = _doc.GetElement(ElementIdCompat.NewId(x));
                 if (el == null) { rows.Add(new { groupId = x, status = "not-found" }); continue; }
                 var g = el as Group;
                 if (g == null) { rows.Add(new { groupId = x, status = "not-a-group", kind = el.GetType().Name }); continue; }
@@ -55,7 +55,7 @@ namespace RevitMcpAddin.Handlers
                     groupId = x,
                     name = g.Name,
                     typeName = g.GroupType != null ? g.GroupType.Name : null,
-                    typeId = g.GroupType != null ? g.GroupType.Id.IntegerValue : 0,
+                    typeId = g.GroupType != null ? g.GroupType.Id.Value : 0,
                     members = memberCount,
                     instancesOfSameType = siblings,
                     level = (_doc.GetElement(g.LevelId) as Level) != null ? (_doc.GetElement(g.LevelId) as Level).Name : null,
@@ -64,7 +64,7 @@ namespace RevitMcpAddin.Handlers
                 targets.Add(g);
             }
 
-            int done = 0; var errs = new List<string>(); var freed = new List<int>();
+            int done = 0; var errs = new List<string>(); var freed = new List<long>();
             if (apply && targets.Count > 0)
             {
                 using (var tx = new Transaction(_doc, "解除群組"))
@@ -80,10 +80,10 @@ namespace RevitMcpAddin.Handlers
                         try
                         {
                             var ids = g.UngroupMembers();
-                            if (ids != null) freed.AddRange(ids.Select(i => i.IntegerValue));
+                            if (ids != null) freed.AddRange(ids.Select(i => i.Value));
                             done++;
                         }
-                        catch (Exception ex) { errs.Add(g.Id.IntegerValue + ": " + ex.Message); }
+                        catch (Exception ex) { errs.Add(g.Id.Value + ": " + ex.Message); }
                     }
                     tx.Commit();
                 }

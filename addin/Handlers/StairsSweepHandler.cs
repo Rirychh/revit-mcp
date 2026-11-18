@@ -260,9 +260,9 @@ namespace RevitMcpAddin.Handlers
                            ?? throw new InvalidOperationException("輪廓樣板裡找不到平面視圖。");
                 using (var t = new Transaction(fdoc, "MCP Profile"))
                 {
-                    t.Start();
+                    TxGuard.Start(t);
                     for (int i = 0; i < pts.Count; i++) fdoc.FamilyCreate.NewDetailCurve(view, Line.CreateBound(pts[i], pts[(i + 1) % pts.Count]));
-                    t.Commit();
+                    TxGuard.Commit(t);
                 }
                 fdoc.SaveAs(path, new SaveAsOptions { OverwriteExistingFile = true });
             }

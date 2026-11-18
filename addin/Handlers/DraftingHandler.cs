@@ -31,16 +31,16 @@ namespace RevitMcpAddin.Handlers
             foreach (var vft in new FilteredElementCollector(_doc)
                          .OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
                          .Where(v => v.ViewFamily == ViewFamily.Drafting))
-                res.ViewFamilyTypes.Add(new NamedIdDto { Id = vft.Id.IntegerValue, Name = vft.Name });
+                res.ViewFamilyTypes.Add(new NamedIdDto { Id = vft.Id.Value, Name = vft.Name });
 
             foreach (var tt in new FilteredElementCollector(_doc)
                          .OfClass(typeof(TextNoteType)).Cast<TextNoteType>())
-                res.TextNoteTypes.Add(new NamedIdDto { Id = tt.Id.IntegerValue, Name = tt.Name });
+                res.TextNoteTypes.Add(new NamedIdDto { Id = tt.Id.Value, Name = tt.Name });
 
             var lineCat = _doc.Settings.Categories.get_Item(BuiltInCategory.OST_Lines);
             if (lineCat != null)
                 foreach (Category sub in lineCat.SubCategories)
-                    res.LineStyles.Add(new NamedIdDto { Id = sub.Id.IntegerValue, Name = sub.Name });
+                    res.LineStyles.Add(new NamedIdDto { Id = sub.Id.Value, Name = sub.Name });
 
             res.ViewFamilyTypes = res.ViewFamilyTypes.OrderBy(x => x.Name).ToList();
             res.TextNoteTypes   = res.TextNoteTypes.OrderBy(x => x.Name).ToList();
@@ -70,7 +70,7 @@ namespace RevitMcpAddin.Handlers
                 return JsonConvert.SerializeObject(ApiResponse<CreateDraftingViewResult>.Ok(
                     new CreateDraftingViewResult
                     {
-                        ViewId = existing.Id.IntegerValue, ViewName = existing.Name,
+                        ViewId = existing.Id.Value, ViewName = existing.Name,
                         Scale = existing.Scale, AlreadyExisted = true
                     }));
 
@@ -81,15 +81,15 @@ namespace RevitMcpAddin.Handlers
             ViewDrafting view;
             using (var tx = new Transaction(_doc, "MCP 建立製圖視圖"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 view = ViewDrafting.Create(_doc, vft.Id);
                 try { view.Name = req.Name; } catch { }
                 try { view.Scale = req.Scale; } catch { }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<CreateDraftingViewResult>.Ok(
                 new CreateDraftingViewResult
-                { ViewId = view.Id.IntegerValue, ViewName = view.Name, Scale = view.Scale }));
+                { ViewId = view.Id.Value, ViewName = view.Name, Scale = view.Scale }));
         }
 
         // ── 改製圖視圖的比例／名稱 ────────────────────────────────────────
@@ -98,12 +98,12 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<UpdateDraftingViewRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<CreateDraftingViewResult>($"View {req.ViewId} not found.");
 
             using (var tx = new Transaction(_doc, "MCP 修改視圖"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 if (req.Scale.HasValue)
                 {
                     try { view.Scale = req.Scale.Value; }
@@ -114,11 +114,11 @@ namespace RevitMcpAddin.Handlers
                     try { view.Name = req.Name!; }
                     catch (Exception ex) { tx.RollBack(); return Fail<CreateDraftingViewResult>("改名失敗：" + ex.Message); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<CreateDraftingViewResult>.Ok(
                 new CreateDraftingViewResult
-                { ViewId = view.Id.IntegerValue, ViewName = view.Name, Scale = view.Scale, AlreadyExisted = true }));
+                { ViewId = view.Id.Value, ViewName = view.Name, Scale = view.Scale, AlreadyExisted = true }));
         }
 
         // ── 依 id 刪除元素（比整個視圖清空安全） ──────────────────────────
@@ -131,7 +131,7 @@ namespace RevitMcpAddin.Handlers
             var ids = new List<ElementId>();
             foreach (var id in req.ElementIds)
             {
-                var e = _doc.GetElement(new ElementId((int)id));
+                var e = _doc.GetElement(ElementIdCompat.NewId(id));
                 if (e == null) { res.Failed.Add($"[{id}] 不存在"); continue; }
                 ids.Add(e.Id);
                 res.Matched.Add($"[{id}] {e.Category?.Name} {e.Name}");
@@ -140,13 +140,13 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 刪除元素"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var id in ids)
                 {
                     try { _doc.Delete(id); res.Deleted++; }
-                    catch (Exception ex) { res.Failed.Add($"[{id.IntegerValue}] {ex.Message}"); }
+                    catch (Exception ex) { res.Failed.Add($"[{id.Value}] {ex.Message}"); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<DeleteElementsResult>.Ok(res));
         }
@@ -157,7 +157,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<DraftingContentRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<DraftingContentResult>($"View {req.ViewId} not found.");
 
             var res = new DraftingContentResult
@@ -209,7 +209,7 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 製圖視圖內容"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var c in curves)
                 {
                     try
@@ -290,7 +290,7 @@ namespace RevitMcpAddin.Handlers
                     }
                     catch (Exception ex) { res.Skipped.Add($"文字「{t.Text}」：" + ex.Message); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<DraftingContentResult>.Ok(res));
         }
@@ -300,7 +300,7 @@ namespace RevitMcpAddin.Handlers
         {
             var req = JsonConvert.DeserializeObject<DraftingContentRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
-            if (_doc.GetElement(new ElementId((int)req.ViewId)) is not View view)
+            if (_doc.GetElement(ElementIdCompat.NewId(req.ViewId)) is not View view)
                 return Fail<DraftingContentResult>($"View {req.ViewId} not found.");
 
             var res = new DraftingContentResult
@@ -317,13 +317,13 @@ namespace RevitMcpAddin.Handlers
 
             using (var tx = new Transaction(_doc, "MCP 清空製圖視圖"))
             {
-                tx.Start();
+                TxGuard.Start(tx);
                 foreach (var id in ids)
                 {
                     try { _doc.Delete(id); res.CurvesCreated++; }
                     catch (Exception ex) { res.Skipped.Add(ex.Message); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
             return JsonConvert.SerializeObject(ApiResponse<DraftingContentResult>.Ok(res));
         }
