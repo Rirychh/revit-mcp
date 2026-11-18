@@ -49,7 +49,7 @@ const live = new Map(tools.map((t) => [t.name, t]));
 const declared = new Map(manifest.tools.map((t) => [t.name, t]));
 
 // 這兩支是 MCP 端的多實例探測工具，刻意不對應任何 addin 路由，不在 manifest 內。
-const EXPECTED_EXTRA = new Set(["revit_list_instances", "revit_use_instance"]);
+const EXPECTED_EXTRA = new Set(["revit_list_instances", "revit_use_instance", "revit_toolsets"]);
 
 const missing = [...declared.keys()].filter((n) => !live.has(n));
 const extra = [...live.keys()].filter((n) => !declared.has(n) && !EXPECTED_EXTRA.has(n));

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { revitRequest } from "../services/revitClient.js";
 import { ResponseFormat } from "../constants.js";
 import type { ViewDto, ScreenshotResult } from "../types.js";
+import { applyArg, preflightResult } from "../services/preflight.js";
 
 type Any = Record<string, unknown>;
 const ok  = (d: unknown) => ({ content: [{ type: "text" as const, text: "```json\n" + JSON.stringify(d, null, 2) + "\n```" }], structuredContent: d as Any });
@@ -74,12 +75,14 @@ Args:
         viewType:  z.enum(["FloorPlan", "Section", "3D"]).describe("Type of view"),
         levelName: z.string().optional().describe("Level name (required for FloorPlan)"),
         name:      z.string().optional().describe("Custom view name"),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (params) => {
       try {
         const view = await revitRequest<ViewDto>("post", "/views", undefined, params);
+        const pf = preflightResult(view); if (pf) return pf;
         const text = `✅ Created view [${view.id}]: **${view.name}** (${view.viewType})`;
         return { content: [{ type: "text", text }], structuredContent: view as unknown as Record<string, unknown> };
       } catch (e) {

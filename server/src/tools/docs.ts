@@ -5,6 +5,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { revitRequest } from "../services/revitClient.js";
+import { applyArg } from "../services/preflight.js";
 
 const LONG = 600_000;
 const txt = (o: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(o, null, 2) }] });
@@ -178,6 +179,7 @@ Instances land in the currently active design option.`,
       levels: z.array(z.object({ name: z.string(), elevationMm: z.number() })).optional(),
       familyFolder: z.string().optional(),
       replace: z.boolean().default(true),
+      apply: applyArg,
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (a) => {
@@ -252,19 +254,21 @@ Args:
   server.registerTool("revit_link_cad", {
     title: "Link CAD (DWG) files",
     description: `Link DWG files into the floor plan of a given level.
-⚠ 沒有 apply／dryRun 預覽開關：每次呼叫都直接開 Transaction 寫入模型。請先確認路徑與樓層再呼叫。
+apply=false（預設）只預檢，回報請求內容；確認路徑與樓層後用 apply=true 連結。
 Args:
   - document: target document keyword; omit = active document
   - paths: full paths of the DWGs to link
   - level: which level's floor plan to link into
   - thisViewOnly: visible in that view only (default false)
-  - pin: pin the link after placing (default true)`,
+  - pin: pin the link after placing (default true)
+  - apply: false = preflight only (default); true = link`,
     inputSchema: z.object({
       document:     docArg,
       paths:        z.array(z.string().min(1)).min(1).describe("Full paths of the DWG files"),
       level:        z.string().optional().describe("Level whose floor plan the CAD is linked into"),
       thisViewOnly: z.boolean().default(false),
       pin:          z.boolean().default(true),
+      apply: applyArg,
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (a) => {
@@ -274,14 +278,15 @@ Args:
   server.registerTool("revit_move_link", {
     title: "Move a Revit link instance",
     description: `Move one Revit link instance, and optionally acquire its shared coordinates / set the project base point elevation.
-⚠ 沒有 apply／dryRun 預覽開關：每次呼叫都直接開 Transaction 寫入模型。
+apply=false（預設）只預檢，回報請求內容；確認後用 apply=true 執行。
 nameContains must match EXACTLY ONE link, otherwise the handler refuses (deliberate protection against moving the wrong link).
 Args:
   - document: target document keyword; omit = active document
   - nameContains: link name keyword, must match exactly one link
   - dxMm / dyMm / dzMm: translation in mm (default 0)
   - acquireCoordinates: acquire shared coordinates from the link (default false)
-  - setElevationM: set the project base point elevation (m)`,
+  - setElevationM: set the project base point elevation (m)
+  - apply: false = preflight only (default); true = execute`,
     inputSchema: z.object({
       document:           docArg,
       nameContains:       z.string().optional().describe("Link name keyword; must match exactly one link"),
@@ -290,6 +295,7 @@ Args:
       dzMm:               z.number().default(0),
       acquireCoordinates: z.boolean().default(false),
       setElevationM:      z.number().optional(),
+      apply: applyArg,
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (a) => {

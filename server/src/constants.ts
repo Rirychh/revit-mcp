@@ -12,7 +12,12 @@ export const PORT_RANGE_COUNT = Number(process.env.REVIT_PORT_RANGE_COUNT ?? 10)
 export const PINNED_PORT = process.env.REVIT_PORT ? Number(process.env.REVIT_PORT) : null;
 
 export const PROBE_TIMEOUT_MS   = 1_500;
-export const REQUEST_TIMEOUT_MS = 30_000;
+// 讀取類請求的等待時間；會改模型的請求（POST/PUT）給長一點，大模型的交易常超過 30 秒。
+// 兩者都可用環境變數調整。add-in 端的等待時間會比這裡少 ADDIN_TIMEOUT_MARGIN_MS，
+// 讓 add-in 先逾時並明確回報「沒有執行」或「仍在執行」。
+export const REQUEST_TIMEOUT_MS = Number(process.env.REVIT_REQUEST_TIMEOUT_MS ?? 30_000);
+export const WRITE_TIMEOUT_MS   = Number(process.env.REVIT_WRITE_TIMEOUT_MS ?? 120_000);
+export const ADDIN_TIMEOUT_MARGIN_MS = 3_000;
 export const CHARACTER_LIMIT    = 25_000;
 
 export enum ResponseFormat {
