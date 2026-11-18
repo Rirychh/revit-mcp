@@ -26,7 +26,7 @@ namespace RevitMcpAddin.Handlers
             var r = string.IsNullOrWhiteSpace(body) ? new JObject() : JObject.Parse(body);
             var arr = r["ids"] as JArray;
             if (arr == null || arr.Count == 0) return Fail("需要 ids。");
-            var targets = new HashSet<int>(arr.Select(x => (int)x));
+            var targets = new HashSet<long>(arr.Select(x => (long)x));
 
             var hits = new List<object>();
             int scanned = 0;
@@ -38,14 +38,14 @@ namespace RevitMcpAddin.Handlers
                 try { refs = d.References; } catch { continue; }
                 if (refs == null) continue;
 
-                var touched = new List<int>();
+                var touched = new List<long>();
                 foreach (Reference rf in refs)
                 {
                     try
                     {
                         var eid = rf.ElementId;
-                        if (eid != null && eid != ElementId.InvalidElementId && targets.Contains(eid.IntegerValue))
-                            touched.Add(eid.IntegerValue);
+                        if (eid != null && eid != ElementId.InvalidElementId && targets.Contains(eid.Value))
+                            touched.Add(eid.Value);
                     }
                     catch { }
                 }
@@ -67,7 +67,7 @@ namespace RevitMcpAddin.Handlers
 
                 hits.Add(new
                 {
-                    constraintId = d.Id.IntegerValue,
+                    constraintId = d.Id.Value,
                     category = catName,
                     typeName = d.DimensionType?.Name,
                     view = viewName,
@@ -80,8 +80,8 @@ namespace RevitMcpAddin.Handlers
 
             var byTarget = targets.ToDictionary(
                 t => t.ToString(),
-                t => hits.Where(h => ((List<int>)h.GetType().GetProperty("touches").GetValue(h)).Contains(t))
-                         .Select(h => (int)h.GetType().GetProperty("constraintId").GetValue(h)).ToList());
+                t => hits.Where(h => ((List<long>)h.GetType().GetProperty("touches").GetValue(h)).Contains(t))
+                         .Select(h => (long)h.GetType().GetProperty("constraintId").GetValue(h)).ToList());
 
             return Ok(new { scannedDimensions = scanned, hitCount = hits.Count, hits, byTarget });
         }

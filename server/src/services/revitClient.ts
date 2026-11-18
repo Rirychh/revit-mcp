@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import axios, { AxiosError } from "axios";
-import { REQUEST_TIMEOUT_MS, PORT_RANGE_START, PORT_RANGE_COUNT } from "../constants.js";
+import { REQUEST_TIMEOUT_MS, WRITE_TIMEOUT_MS, ADDIN_TIMEOUT_MARGIN_MS, PORT_RANGE_START, PORT_RANGE_COUNT } from "../constants.js";
 import { resolvePort, baseUrlFor, clearSelectedPort } from "./instances.js";
 import { authHeaders, invalidateToken, tokenFilePath } from "./token.js";
 import type { ApiResponse } from "../types.js";
@@ -20,8 +20,11 @@ export async function revitRequest<T>(
   path:   string,
   params?: Record<string, unknown>,
   body?:   unknown,
-  timeoutMs: number = REQUEST_TIMEOUT_MS
+  timeoutMs: number = method === "get" ? REQUEST_TIMEOUT_MS : WRITE_TIMEOUT_MS
 ): Promise<T> {
+  // add-in 端的等待時間比這裡短一點，讓它先逾時並回報「沒有執行／仍在執行」。
+  // 如果由這裡先放棄，工作還排在 Revit 主執行緒，之後照樣會執行，AI 重試就做兩次。
+  const addinTimeoutMs = Math.max(5_000, timeoutMs - ADDIN_TIMEOUT_MARGIN_MS);
   const port    = await resolvePort();
   const baseURL = baseUrlFor(port);
 
@@ -37,6 +40,7 @@ export async function revitRequest<T>(
         // X-Revit-Mcp-Token 是 add-in 的 shared secret；沒帶會被回 401。
         headers: {
           "Content-Type": "application/json; charset=utf-8",
+          "X-Revit-Mcp-Timeout-Ms": String(addinTimeoutMs),
           ...(await authHeaders(port)),
         },
         params:  method === "get" ? params : undefined,
@@ -76,7 +80,14 @@ function handleError(err: unknown, baseURL: string, port: number): string {
         `（掃描範圍 ${PORT_RANGE_START}-${PORT_RANGE_START + PORT_RANGE_COUNT - 1}）。`
       );
     if (err.code === "ECONNABORTED")
-      return "Request timed out. The Revit operation is taking too long.";
+      return (
+        "等不到 Revit 回應（連線逾時）。這個請求可能已在 Revit 裡排隊或執行中；" +
+        "請勿重送同一個修改，先用查詢工具確認模型狀態。"
+      );
+    // add-in 的錯誤一律是 { success:false, error }；直接給訊息，不要包一層 JSON。
+    const addinError = (err.response?.data as { error?: unknown } | undefined)?.error;
+    if (err.response?.status === 500 && typeof addinError === "string" && addinError)
+      return addinError;
     if (err.response?.status === 401)
       return (
         `認證失敗（401）：${baseURL} 上的 add-in 不接受我們的 token。` +

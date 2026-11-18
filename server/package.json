@@ -1,6 +1,6 @@
 {
   "name": "revit-mcp-server",
-  "version": "1.0.0",
+  "version": "1.10.2",
   "description": "MCP Server for Autodesk Revit integration — lets Claude query and control Revit models",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "dev":   "tsx watch src/index.ts",
     "build": "tsc",
+    "test":  "npm run build && node verify_tools.mjs && node test_target_guard.mjs && node test_guards.mjs",
     "clean": "rm -rf dist"
   },
   "engines": { "node": ">=18" },

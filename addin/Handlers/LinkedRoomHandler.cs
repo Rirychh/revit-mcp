@@ -76,7 +76,7 @@ namespace RevitMcpAddin.Handlers
 
                 res.Rooms.Add(new LinkedRoomDto
                 {
-                    Id     = room.Id.IntegerValue,
+                    Id     = room.Id.Value,
                     Source = label,
                     Number = room.Number ?? "",
                     Name   = name,

@@ -19,7 +19,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 
 ## 功能
 
-共 165 個 Revit 工具，另有 2 個同時開多個 Revit 時用來切換的工具（`revit_list_instances`、`revit_use_instance`）。會改模型的工具預設只預檢（`apply=false`），回報會做什麼，確認後再用 `apply=true` 在單一交易裡執行，任何錯誤整批回滾。長度單位一律 mm。
+共 165 個 Revit 工具，另有 2 個同時開多個 Revit 時用來切換的工具（`revit_list_instances`、`revit_use_instance`），以及 1 個切換工具分組的工具（`revit_toolsets`，見「工具分組載入」）。會改模型的工具預設只預檢（`apply=false`），回報會做什麼，確認後再用 `apply=true` 在單一交易裡執行，任何錯誤整批回滾。長度單位一律 mm。
 
 ### 文件與專案
 
@@ -62,16 +62,16 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 
 | 工具 | 說明 |
 |---|---|
-| `revit_create_element` | 在指定座標放置一個族實例。 |
-| `revit_create_levels` | 批次建立標高（樓層）。 |
-| `revit_create_walls` | 沿一或多條折線在單一樓層建牆（含帷幕牆）。 |
-| `revit_create_floors` | 批次在一或多個樓層建樓板（可含開口）。 |
-| `revit_create_columns` | 以 DirectShape 建圓柱（歸在結構柱品類）。 |
+| `revit_create_element` | 在指定座標放置一個族實例。apply=false 預檢。 |
+| `revit_create_levels` | 批次建立標高（樓層）。apply=false 預檢。 |
+| `revit_create_walls` | 沿一或多條折線在單一樓層建牆（含帷幕牆）。apply=false 預檢。 |
+| `revit_create_floors` | 批次在一或多個樓層建樓板（可含開口）。apply=false 預檢。 |
+| `revit_create_columns` | 以 DirectShape 建圓柱（歸在結構柱品類）。apply=false 預檢。 |
 | `revit_create_grids` | 建立網格線。apply=false 預檢。 |
 | `revit_create_structural_framing` | 建立結構梁。apply=false 預檢。 |
 | `revit_create_rooms` | 在點位建立房間。apply=false 預檢。 |
 | `revit_create_room_separation` | 建立房間分隔線。apply=false 預檢。 |
-| `revit_mass_boxes` | 在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。 |
+| `revit_mass_boxes` | 在專案裡建概念量體（每個 box 一個 Metric Mass 族：擠出矩形或多邊形），可同時建樓層並加量體樓板以回報面積。apply=false 預檢。 |
 | `revit_place_doors_windows` | 把門窗放進牆：給點位會自動找最近的直牆並投影到牆中心線，可設窗台高、翻轉。apply=false 預檢。 |
 | `revit_create_ceilings` | 建立天花板：依房間（以房間完成面邊界）或指定迴圈，可設離地高度。apply=false 預檢。 |
 | `revit_create_roof` | 依跡線建立屋頂，可設坡度（每條邊都定義坡度，形成四坡）與基準偏移。apply=false 預檢。 |
@@ -87,7 +87,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 
 | 工具 | 說明 |
 |---|---|
-| `revit_modify_element` | 修改既有元件的一個或多個參數。 |
+| `revit_modify_element` | 修改既有元件的一個或多個參數。apply=false 預檢。 |
 | `revit_batch_set_parameters` | 批次設定多個元件的參數，全有或全無：任何一筆無法設定就整批不執行；類型參數預設保護。apply=false 預檢。 |
 | `revit_rotate_elements` | 繞任意軸旋轉指定元件（可先預檢不套用）。 |
 | `revit_mirror_elements` | 鏡射元件（預設保留原件）。apply=false 預檢。 |
@@ -122,7 +122,7 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 | 工具 | 說明 |
 |---|---|
 | `revit_list_views` | 列出非樣板視圖（id、名稱、類型、樓層、比例、所在圖號）。 |
-| `revit_create_view` | 建立新視圖（平面／剖面／3D）。 |
+| `revit_create_view` | 建立新視圖（平面／剖面／3D）。apply=false 預檢。 |
 | `revit_duplicate_views` | 複製視圖（含詳圖／不含詳圖／從屬）。 |
 | `revit_crop_view` | 重設視圖裁剪範圍，讓它停在界定房間的結構牆上（廁所詳圖之類的放大圖用）。 |
 | `revit_rotate_view_crop` | 旋轉平面視圖的裁剪範圍（把斜的量體轉成水平垂直）。 |
@@ -208,11 +208,11 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 
 | 工具 | 說明 |
 |---|---|
-| `revit_link_cad` | 連結 CAD（DWG）檔到指定樓層的平面視圖。 |
+| `revit_link_cad` | 連結 CAD（DWG）檔到指定樓層的平面視圖。apply=false 預檢。 |
 | `revit_cad_extract` | 萃取視圖中 DWG 的線段、封閉迴圈（含首尾相接的線段串成的迴圈）、圓，存成工作階段快取，回傳各圖層統計與 cacheId。 |
 | `revit_cad_generate_bim` | 依 revit_cad_extract 的快取產生柱（矩形／圓形迴圈，含旋轉角）或樓板（封閉迴圈）。apply=false 預檢列出尺寸分組與可用類型。 |
 | `revit_link_revit` | 把 .rvt 連結進文件（預設原點對原點，shared＝依共用座標），可同時取得其共用座標。 |
-| `revit_move_link` | 移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。 |
+| `revit_move_link` | 移動單一 Revit 連結實例，並可取得共用座標／設定專案基準高程。apply=false 預檢。 |
 | `revit_delete_in_link` | 刪除「被連結的 Revit 檔」裡的元件，並把結果存回那個檔案。 |
 | `revit_cad_wall_diff` | 視圖中 DWG 牆線與 Revit 可見牆比對：列出 CAD 有 Revit 沒有（newWalls）、Revit 有 CAD 沒有（obsoleteWalls／partialWalls）；apply=true 依 newWalls 建牆。 |
 
@@ -282,6 +282,51 @@ Claude Desktop ──stdio──▶ server/ (Node.js MCP server) ──HTTP 127.
 - `profilePrefix` / `massPrefix`：輪廓族、量體另外指定前綴，`null` 沿用 `familyPrefix`。
 - `textType`：`revit_write_revision_notes` 的預設文字類型；`revisionCloudTextType`：`revit_annotate_revision_clouds` 的預設文字類型（`null` 沿用 `textType`）。專案裡找不到時用第一個文字類型。
 - `titleBlocks`：修訂說明寫進各圖框的位置（mm，相對圖框插入點）；呼叫時傳入的 `titleBlocks` 同名時優先。
+
+## 規則設定（選用）
+
+在 `%LOCALAPPDATA%\revit-mcp\rules.json` 放一份設定；沒有這個檔就全部用預設值。
+
+```json
+{
+  "disabledTools": ["revit_ungroup_groups"],
+  "legacyPreview": true,
+  "checkOwnership": true
+}
+```
+
+- `disabledTools`：停用的工具。MCP server 啟動時從工具清單拿掉（改完要重開 MCP 客戶端），Revit 增益集則是立刻擋下，Revit 內的對話面板也一併生效。
+- `legacyPreview`（預設 `true`）：`revit_create_element`、`revit_modify_element`、`revit_create_view`、`revit_create_levels`／`walls`／`floors`／`columns`、`revit_mass_boxes`、`revit_link_cad`、`revit_move_link` 沒帶 `apply=true` 時只回預檢。這幾支的預檢只回報請求內容、筆數與樓層是否存在，不做幾何或類型驗證。設成 `false` 回到舊行為（呼叫就寫入）。
+- `checkOwnership`（預設 `true`）：工作共用模型裡，移動、旋轉、換類型、改參數、刪除這類「就地修改指定元件」的工具，遇到元件被其他使用者借用時整個請求擋下，並列出元件 id 與借用者。借用狀態取自本機快取，先「重新載入最新」會比較準。
+
+## 工具分組載入
+
+全部工具的清單約 20 萬字元，每個對話都會載入。用環境變數 `REVIT_MCP_TOOLSETS` 指定啟動時要開的組（逗號分隔）；沒設或 `all` 代表全部開。`core` 一定開。
+
+| 組 | 內容 |
+|---|---|
+| `core` | 文件、多 Revit 切換、元件查詢與基本修改、視圖清單與截圖 |
+| `modeling` | 牆／樓板／柱、門窗、天花、屋頂、樓梯、帷幕、族群、類型與材料 |
+| `drawing` | 標籤、尺寸、文字、視圖設定、圖紙、修訂、製圖視圖、明細表、CAD 轉 BIM |
+| `qc` | 模型健檢、警告、清除、碰撞、數量、專案設定與 DWG／NWC 匯出 |
+| `mep` | 風管、水管、MEP 系統 |
+| `site` | 基地模、地界線、連結模型裡的元件與房間 |
+| `export` | IFC、明細表 CSV 匯出 |
+
+Claude Desktop 的設定範例（只開出圖與健檢）：
+
+```json
+"revit": { "command": "…\\node.exe", "args": ["…\\server\\dist\\index.js"], "env": { "REVIT_MCP_TOOLSETS": "drawing,qc" } }
+```
+
+對話中可用 `revit_toolsets` 查看各組狀態並開關。客戶端若不支援工具清單更新通知，開關後要重開對話才看得到。
+
+## 逾時與重複執行
+
+- 讀取類請求預設等 30 秒，會改模型的請求預設等 120 秒；特別久的工具（同步中央、匯出等）各自設定更長。可用環境變數 `REVIT_REQUEST_TIMEOUT_MS`、`REVIT_WRITE_TIMEOUT_MS` 調整。
+- 等待時間由 MCP server 帶給增益集，增益集會先逾時並回報兩種結果之一：「沒有執行，已取消」（還在排隊，例如 Revit 有對話框開著），或「已開始執行但尚未完成」。後者不要重送，等 Revit 忙完後用查詢工具確認。
+- 相同的修改請求還在排隊或執行時，再送一次會被擋下。
+- 增益集自己開的交易不會跳出 Revit 的警告或錯誤對話框：警告略過，錯誤整筆回復並把 Revit 的說明回給 AI。
 
 ## 支援的 AI
 

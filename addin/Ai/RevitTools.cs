@@ -45,7 +45,7 @@ namespace RevitMcpAddin.Ai
         /// 絕不「靜默退回內建的一小份清單」—— 那樣會讓面板看起來正常運作，
         /// 實際上少了一大半工具，而且沒人會發現。
         /// </summary>
-        private static JObject Manifest()
+        internal static JObject Manifest()
         {
             lock (_lock)
             {

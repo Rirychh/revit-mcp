@@ -113,23 +113,23 @@ namespace RevitMcpAddin.Handlers
             var before = li.GetTotalTransform().Origin;
             using (var t = new Transaction(doc, "MCP 移動連結"))
             {
-                t.Start();
+                TxGuard.Start(t);
                 bool pinned = li.Pinned; if (pinned) li.Pinned = false;
                 ElementTransformUtils.MoveElement(doc, li.Id, new XYZ(req.DxMm * MM, req.DyMm * MM, req.DzMm * MM));
                 if (pinned) li.Pinned = true;
-                t.Commit();
+                TxGuard.Commit(t);
             }
             if (req.AcquireCoordinates || req.SetElevationM.HasValue)
             {
                 using var t2 = new Transaction(doc, "MCP 共用座標");
-                t2.Start();
+                TxGuard.Start(t2);
                 if (req.AcquireCoordinates) doc.AcquireCoordinates(li.Id);
                 if (req.SetElevationM.HasValue)
                 {
                     var loc = doc.ActiveProjectLocation; var pp0 = loc.GetProjectPosition(XYZ.Zero);
                     loc.SetProjectPosition(XYZ.Zero, new ProjectPosition(pp0.EastWest, pp0.NorthSouth, req.SetElevationM.Value / 0.3048, pp0.Angle));
                 }
-                t2.Commit();
+                TxGuard.Commit(t2);
             }
             var after = li.GetTotalTransform().Origin;
             var pl = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
@@ -160,7 +160,7 @@ namespace RevitMcpAddin.Handlers
             if (baseAsset == null) throw new InvalidOperationException("找不到一般（Generic）外觀資產，資產庫數量 " + lib.Count);
             var res = new List<object>();
             using var t = new Transaction(doc, "MCP 材質彩現外觀");
-            t.Start();
+            TxGuard.Start(t);
             foreach (var m in req.Materials ?? new List<AppMat>())
             {
                 try
@@ -188,7 +188,7 @@ namespace RevitMcpAddin.Handlers
                 }
                 catch (Exception ex) { res.Add(new { m.Name, ok = false, error = ex.Message }); }
             }
-            t.Commit();
+            TxGuard.Commit(t);
             return Ok(new { baseAsset = baseAsset.Name, results = res });
         }
         public class AppMat

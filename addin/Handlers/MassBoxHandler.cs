@@ -62,7 +62,7 @@ namespace RevitMcpAddin.Handlers
                 var fdoc = _uiApp.Application.NewFamilyDocument(tpl);
                 using (var t = new Transaction(fdoc, "量體"))
                 {
-                    t.Start();
+                    TxGuard.Start(t);
                     var plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero);
                     var sp = SketchPlane.Create(fdoc, plane);
                     var pts = (b.Loop != null && b.Loop.Count >= 3)
@@ -75,7 +75,7 @@ namespace RevitMcpAddin.Handlers
                         ra.Append(mc.GeometryCurve.Reference);
                     }
                     fdoc.FamilyCreate.NewExtrusionForm(true, ra, new XYZ(0, 0, (b.ZMax - b.ZMin) * MM));
-                    t.Commit();
+                    TxGuard.Commit(t);
                 }
                 b.Name = Naming.Prefixed(b.Name, "mass");
                 string path = System.IO.Path.Combine(outDir, b.Name + ".rfa");
@@ -127,7 +127,7 @@ namespace RevitMcpAddin.Handlers
                         if (lv == null) continue;
                         try { MassInstanceUtils.AddMassLevelDataToMassInstance(doc, inst.Id, lv.Id); nf++; } catch (Exception ex) { notes.Add($"{b.Name}@{ln}: {ex.Message}"); }
                     }
-                    results.Add(new { name = b.Name, instanceId = inst.Id.IntegerValue, massFloors = nf }); made.Add((b.Name, inst.Id));
+                    results.Add(new { name = b.Name, instanceId = inst.Id.Value, massFloors = nf }); made.Add((b.Name, inst.Id));
                 }
                 doc.Regenerate();
                 t.Commit();

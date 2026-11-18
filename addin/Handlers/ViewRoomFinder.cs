@@ -106,7 +106,7 @@ namespace RevitMcpAddin.Handlers
 
             var hit = new ViewRoomHit
             {
-                RoomId = room.Id.IntegerValue,
+                RoomId = room.Id.Value,
                 Source = source,
                 Label  = $"{room.Number} {room.Name}",
                 AreaM2 = room.Area * 0.09290304   // ft² → m²

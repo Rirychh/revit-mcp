@@ -45,9 +45,9 @@ namespace RevitMcpAddin.Handlers
             };
 
             using var tx = new Transaction(_doc, "MCP Export IFC");
-            tx.Start();
+            TxGuard.Start(tx);
             _doc.Export(outDir, outFile, opts);
-            tx.Commit();
+            TxGuard.Commit(tx);
 
             var fullPath = Path.Combine(outDir, outFile);
             var size     = File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0;
@@ -81,7 +81,7 @@ namespace RevitMcpAddin.Handlers
 
             if (req.ViewIds?.Count > 0)
                 schedules = schedules
-                    .Where(vs => req.ViewIds.Contains(vs.Id.IntegerValue))
+                    .Where(vs => req.ViewIds.Contains(vs.Id.Value))
                     .ToList();
 
             if (schedules.Count == 0)
@@ -97,14 +97,14 @@ namespace RevitMcpAddin.Handlers
             var exportedFiles = new List<string>();
 
             using var tx = new Transaction(_doc, "MCP Export Schedule");
-            tx.Start();
+            TxGuard.Start(tx);
             foreach (var sched in schedules)
             {
                 var fileName = $"{SanitizeFileName(sched.Name)}_{DateTime.Now:yyyyMMddHHmmss}.csv";
                 sched.Export(outDir, fileName, opts);
                 exportedFiles.Add(Path.Combine(outDir, fileName));
             }
-            tx.Commit();
+            TxGuard.Commit(tx);
 
             var totalSize = exportedFiles
                 .Where(File.Exists)

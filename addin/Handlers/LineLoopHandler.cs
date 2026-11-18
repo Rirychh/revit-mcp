@@ -41,7 +41,7 @@ namespace RevitMcpAddin.Handlers
             var skipped = new List<long>();
             foreach (var id in req.ElementIds)
             {
-                var el = _doc.GetElement(new ElementId((int)id));
+                var el = _doc.GetElement(ElementIdCompat.NewId(id));
                 if (el is CurveElement ce && ce.GeometryCurve is Line ln)
                 {
                     ids.Add(id);
@@ -151,20 +151,20 @@ namespace RevitMcpAddin.Handlers
             {
                 var degSet = new HashSet<long>(degenerate);
                 using var tx = new Transaction(_doc, "MCP 整理封閉線");
-                tx.Start();
+                TxGuard.Start(tx);
                 for (int i = 0; i < n; i++)
                 {
                     if (degSet.Contains(ids[i])) continue;
                     if (p0[i].DistanceTo(np0[i]) <= 1e-9 && p1[i].DistanceTo(np1[i]) <= 1e-9) continue;
                     try
                     {
-                        var el = (CurveElement)_doc.GetElement(new ElementId((int)ids[i]));
+                        var el = (CurveElement)_doc.GetElement(ElementIdCompat.NewId(ids[i]));
                         el.SetGeometryCurve(Line.CreateBound(np0[i], np1[i]), false);
                         changed++;
                     }
                     catch (Exception ex) { failed.Add($"{ids[i]}: {ex.Message}"); }
                 }
-                tx.Commit();
+                TxGuard.Commit(tx);
             }
 
             var result = new CloseLoopResult

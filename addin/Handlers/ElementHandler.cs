@@ -105,7 +105,7 @@ namespace RevitMcpAddin.Handlers
         // ─── 取得單一元件 ──────────────────────────────────────────────────────
         public string GetElement(long id)
         {
-            var elem = _doc.GetElement(new ElementId((int)id));
+            var elem = _doc.GetElement(ElementIdCompat.NewId(id));
             if (elem == null)
                 return JsonConvert.SerializeObject(ApiResponse<ElementDto>.Fail($"Element {id} not found."));
 
@@ -140,7 +140,7 @@ namespace RevitMcpAddin.Handlers
             }
 
             using var tx = new Transaction(_doc, "MCP Create Element");
-            tx.Start();
+            TxGuard.Start(tx);
 
             if (!symbol.IsActive) symbol.Activate();
 
@@ -159,7 +159,7 @@ namespace RevitMcpAddin.Handlers
             if (req.Parameters != null)
                 SetParameters(instance, req.Parameters);
 
-            tx.Commit();
+            TxGuard.Commit(tx);
 
             return JsonConvert.SerializeObject(ApiResponse<ElementDto>.Ok(MapElement(instance)));
         }
@@ -170,7 +170,7 @@ namespace RevitMcpAddin.Handlers
             var req = JsonConvert.DeserializeObject<ModifyElementRequest>(body)
                       ?? throw new ArgumentException("Invalid request body.");
 
-            var elem = _doc.GetElement(new ElementId((int)id))
+            var elem = _doc.GetElement(ElementIdCompat.NewId(id))
                        ?? throw new InvalidOperationException($"Element {id} not found.");
 
             using var tx = new Transaction(_doc, "MCP Modify Element");
@@ -194,7 +194,7 @@ namespace RevitMcpAddin.Handlers
                 .OrderBy(l => l.Elevation)
                 .Select(l => new LevelDto
                 {
-                    Id        = l.Id.IntegerValue,
+                    Id        = l.Id.Value,
                     Name      = l.Name,
                     Elevation = l.Elevation * 304.8   // feet → mm
                 })
@@ -213,7 +213,7 @@ namespace RevitMcpAddin.Handlers
                 .Where(r => string.IsNullOrEmpty(levelName) || GetLevelName(r) == levelName)
                 .Select(r => new RoomDto
                 {
-                    Id        = r.Id.IntegerValue,
+                    Id        = r.Id.Value,
                     Name      = r.Name,
                     Number    = r.Number,
                     Area      = r.Area * 0.0929,        // sq-ft → sq-m
@@ -228,7 +228,7 @@ namespace RevitMcpAddin.Handlers
         {
             var dto = new ElementDto
             {
-                Id         = e.Id.IntegerValue,
+                Id         = e.Id.Value,
                 Name       = e.Name,
                 Category   = e.Category?.Name ?? "",
                 LevelName  = GetLevelName(e)
@@ -238,7 +238,7 @@ namespace RevitMcpAddin.Handlers
             {
                 dto.FamilyName = fi.Symbol.FamilyName;
                 dto.TypeName   = fi.Symbol.Name;
-                if (fi.Host != null) dto.HostId = fi.Host.Id.IntegerValue;
+                if (fi.Host != null) dto.HostId = fi.Host.Id.Value;
             }
 
             var pt = GetPoint(e);
@@ -268,7 +268,7 @@ namespace RevitMcpAddin.Handlers
 
             if (e.GroupId != null && e.GroupId != ElementId.InvalidElementId)
             {
-                dto.GroupId = e.GroupId.IntegerValue;
+                dto.GroupId = e.GroupId.Value;
                 var grp = _doc.GetElement(e.GroupId);
                 if (grp != null) dto.GroupName = grp.Name;
             }

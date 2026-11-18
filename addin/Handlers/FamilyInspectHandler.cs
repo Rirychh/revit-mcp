@@ -51,7 +51,7 @@ namespace RevitMcpAddin.Handlers
                 var rps = new FilteredElementCollector(fd).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
                     .Select(rp => new
                     {
-                        id = rp.Id.IntegerValue,
+                        id = rp.Id.Value,
                         name = rp.Name,
                         normal = D(rp.Normal),
                         bubble = V(rp.BubbleEnd),
@@ -87,7 +87,7 @@ namespace RevitMcpAddin.Handlers
                     try { bb = e.get_BoundingBox(null); } catch { }
                     forms.Add(new
                     {
-                        id = e.Id.IntegerValue,
+                        id = e.Id.Value,
                         kind,
                         isSolid = e.IsSolid,
                         sketchNormal = D(sketchNormal),
@@ -100,7 +100,7 @@ namespace RevitMcpAddin.Handlers
                 var nested = new FilteredElementCollector(fd).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
                     .Select(fi => new
                     {
-                        id = fi.Id.IntegerValue,
+                        id = fi.Id.Value,
                         symbol = fi.Symbol?.Name,
                         family = fi.Symbol?.Family?.Name,
                         facing = D(fi.FacingOrientation),

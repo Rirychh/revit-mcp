@@ -67,7 +67,7 @@ namespace RevitMcpAddin.Handlers
         {
             var doc = Resolve(qs["document"]);
             var links = new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>()
-                .Select(l => new { id = l.Id.IntegerValue, name = l.Name, loaded = RevitLinkType.IsLoaded(doc, l.GetTypeId()) }).ToList();
+                .Select(l => new { id = l.Id.Value, name = l.Name, loaded = RevitLinkType.IsLoaded(doc, l.GetTypeId()) }).ToList();
             var pp = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
             return Ok(new
             {
@@ -166,7 +166,7 @@ namespace RevitMcpAddin.Handlers
             var pos = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
             return Ok(new
             {
-                document = doc.Title, linkId = li.Id.IntegerValue, linkName = li.Name, notes,
+                document = doc.Title, linkId = li.Id.Value, linkName = li.Name, notes,
                 projectPosition = new { eastWestM = pos.EastWest * 0.3048, northSouthM = pos.NorthSouth * 0.3048, angleDeg = pos.Angle * 180 / Math.PI }
             });
         }

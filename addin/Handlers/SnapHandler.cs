@@ -63,7 +63,7 @@ namespace RevitMcpAddin.Handlers
             foreach (var t in plan.Take(req.SampleCount > 0 ? req.SampleCount : 8))
                 result.Samples.Add(new SnapSample
                 {
-                    Id = t.E.Id.IntegerValue,
+                    Id = t.E.Id.Value,
                     Name = (t.E as FamilyInstance)?.Symbol.Name ?? t.E.Name,
                     DxMm = Math.Round(t.Dx, 1),
                     DyMm = Math.Round(t.Dy, 1)
@@ -85,7 +85,7 @@ namespace RevitMcpAddin.Handlers
                 catch (Exception ex)
                 {
                     result.Skipped++;
-                    result.Warnings.Add($"{t.E.Id.IntegerValue} 移動失敗：{ex.Message}");
+                    result.Warnings.Add($"{t.E.Id.Value} 移動失敗：{ex.Message}");
                 }
             }
             tx.Commit();
@@ -104,7 +104,7 @@ namespace RevitMcpAddin.Handlers
         private List<Element> Resolve(SnapRequest req)
         {
             if (req.ElementIds != null && req.ElementIds.Count > 0)
-                return req.ElementIds.Select(id => _doc.GetElement(new ElementId((int)id)))
+                return req.ElementIds.Select(id => _doc.GetElement(ElementIdCompat.NewId(id)))
                                      .Where(e => e != null).ToList()!;
 
             var collector = new FilteredElementCollector(_doc).WhereElementIsNotElementType();
@@ -121,7 +121,7 @@ namespace RevitMcpAddin.Handlers
                 .Where(e => string.IsNullOrEmpty(req.LevelName) || LevelNameOf(e) == req.LevelName)
                 .Where(e => fams.Count == 0 || (e is FamilyInstance f && fams.Contains(f.Symbol.FamilyName)))
                 .Where(e => hosts.Count == 0 ||
-                            (e is FamilyInstance f2 && f2.Host != null && hosts.Contains(f2.Host.Id.IntegerValue)))
+                            (e is FamilyInstance f2 && f2.Host != null && hosts.Contains(f2.Host.Id.Value)))
                 .Where(e => req.BBox == null || ElementHandler.InBBox(ElementHandler.GetPoint(e), req.BBox))
                 .ToList();
         }

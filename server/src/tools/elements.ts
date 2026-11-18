@@ -7,6 +7,7 @@ import { z } from "zod";
 import { revitRequest } from "../services/revitClient.js";
 import { ResponseFormat, CHARACTER_LIMIT } from "../constants.js";
 import type { ElementDto, ElementListResult, LevelDto, RoomDto, CopyElementsResult } from "../types.js";
+import { applyArg, preflightResult } from "../services/preflight.js";
 
 interface CloseLoopResult {
   applied: boolean;
@@ -207,12 +208,14 @@ Args:
         y:           z.number().default(0).describe("Y coordinate in mm"),
         z:           z.number().default(0).describe("Z coordinate in mm"),
         parameters:  z.record(z.string()).optional().describe("Parameter name → value pairs"),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (params) => {
       try {
         const elem = await revitRequest<ElementDto>("post", "/elements", undefined, params);
+        const pf = preflightResult(elem); if (pf) return pf;
         const text = `✅ Created element [${elem.id}]: **${elem.name}**\n- Family: ${elem.familyName} / ${elem.typeName}\n- Level: ${elem.levelName || "—"}`;
         return { content: [{ type: "text", text }], structuredContent: elem as unknown as Record<string, unknown> };
       } catch (e) {
@@ -236,12 +239,14 @@ Args:
       inputSchema: z.object({
         elementId:  z.number().int().describe("Revit Element ID to modify"),
         parameters: z.record(z.string()).describe("Parameter name → value to set"),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ elementId, parameters }) => {
+    async ({ elementId, parameters, apply }) => {
       try {
-        const elem = await revitRequest<ElementDto>("put", `/elements/${elementId}`, undefined, { parameters });
+        const elem = await revitRequest<ElementDto>("put", `/elements/${elementId}`, undefined, { parameters, apply });
+        const pf = preflightResult(elem); if (pf) return pf;
         const text = `✅ Modified element [${elem.id}]: **${elem.name}**\n${Object.entries(parameters).map(([k,v]) => `- ${k}: ${v}`).join("\n")}`;
         return { content: [{ type: "text", text }], structuredContent: elem as unknown as Record<string, unknown> };
       } catch (e) {

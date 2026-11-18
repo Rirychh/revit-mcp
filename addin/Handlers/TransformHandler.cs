@@ -39,7 +39,7 @@ namespace RevitMcpAddin.Handlers
 
             foreach (var id in ids)
             {
-                var el = _doc.GetElement(new ElementId((int)id));
+                var el = _doc.GetElement(ElementIdCompat.NewId(id));
                 if (el == null) { plan.Add(new { id, ok = false, reason = "找不到元件" }); continue; }
                 if (el.GroupId != null && el.GroupId != ElementId.InvalidElementId)
                 { plan.Add(new { id, ok = false, reason = "在群組內，Revit 不允許從外部修改" }); continue; }
@@ -97,7 +97,7 @@ namespace RevitMcpAddin.Handlers
                         ElementTransformUtils.RotateElement(_doc, el.Id, axis, angleDeg * Math.PI / 180.0);
                         done++;
                     }
-                    catch (Exception ex) { failed.Add(new { id = el.Id.IntegerValue, reason = ex.Message }); }
+                    catch (Exception ex) { failed.Add(new { id = el.Id.Value, reason = ex.Message }); }
                 }
                 tx.Commit();
             }

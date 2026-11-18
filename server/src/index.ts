@@ -39,6 +39,7 @@ import { registerSiteTools }     from "./tools/site.js";
 import { registerDocTools }      from "./tools/docs.js";
 import { installTargetGuard }    from "./services/targetGuard.js";
 import { installCompactTools }   from "./services/compactTools.js";
+import { installToolsets, finishToolsets, group } from "./services/toolsets.js";
 import { registerViewSettingsTools } from "./tools/viewSettings.js";
 import { registerQcTools }       from "./tools/qc.js";
 import { registerDraftingTools } from "./tools/drafting.js";
@@ -61,6 +62,8 @@ const INSTRUCTIONS = [
   "要確認結果長什麼樣：revit_screenshot_view，或 revit_labeled_snapshot（圖上標號對照元件 id）。",
   "多個 Revit 同時開著時，會改模型的工具要加 document（作用中檔名關鍵字）或先用 revit_use_instance 指定目標；沒指定會擋下不執行。",
   "刪除、清除、關檔、同步中央這類動作執行前先跟使用者確認。",
+  "工具分組載入：找不到需要的 revit_* 工具時，用 revit_toolsets 看分組並開啟對應的組。",
+  "回報「仍在執行」或逾時的修改不要重送；先用查詢工具確認模型狀態。",
   "新建族（build_family、輪廓族、量體）若有 %LOCALAPPDATA%\\revit-mcp\\naming.json，會自動補上設定的前綴；最終名稱以回傳結果為準。",
 ].join("\n");
 
@@ -74,30 +77,43 @@ installTargetGuard(server);
 // 在 targetGuard 外層：先整理描述（Args 搬進參數說明、加相近工具），再交給 targetGuard
 installCompactTools(server);
 
-registerInstanceTools(server);
-registerElementTools(server);
-registerViewTools(server);
-registerExportTools(server);
-registerAnnotationTools(server);
-registerFamilyTools(server);
-registerSheetTools(server);
-registerBuildTools(server);
-registerLinkedTools(server);
-registerSiteTools(server);
-registerDocTools(server);
-registerViewSettingsTools(server);
-registerQcTools(server);
-registerDraftingTools(server);
-registerMaterialTools(server);
-registerAnalysisTools(server);
-registerMepTools(server);
-registerModelingTools(server);
-registerLayoutTools(server);
-registerEditTools(server);
-registerViewAnnotTools(server);
-registerProjectTools(server);
-registerStairsSweepTools(server);
-registerTypesAreasTools(server);
+// 最外層：記錄每支工具屬於哪一組，並拿掉 rules.json 停用的工具
+installToolsets(server);
+
+group("core", () => {
+  registerInstanceTools(server);
+  registerElementTools(server);
+  registerViewTools(server);
+  registerDocTools(server);
+});
+group("modeling", () => {
+  registerBuildTools(server);
+  registerFamilyTools(server);
+  registerMaterialTools(server);
+  registerModelingTools(server);
+  registerEditTools(server);
+  registerStairsSweepTools(server);
+  registerTypesAreasTools(server);
+});
+group("drawing", () => {
+  registerAnnotationTools(server);
+  registerSheetTools(server);
+  registerViewSettingsTools(server);
+  registerDraftingTools(server);
+  registerLayoutTools(server);
+  registerViewAnnotTools(server);
+});
+group("qc", () => {
+  registerQcTools(server);
+  registerAnalysisTools(server);
+  registerProjectTools(server);
+});
+group("mep",    () => registerMepTools(server));
+group("site",   () => { registerSiteTools(server); registerLinkedTools(server); });
+group("export", () => registerExportTools(server));
+
+// 依 REVIT_MCP_TOOLSETS 決定啟動時開哪些組，並註冊 revit_toolsets
+finishToolsets(server);
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();

@@ -35,7 +35,7 @@ namespace RevitMcpAddin.Handlers
                             v.ViewType.ToString().Equals(typeFilter, StringComparison.OrdinalIgnoreCase))
                 .Select(v => new ViewDto
                 {
-                    Id        = v.Id.IntegerValue,
+                    Id        = v.Id.Value,
                     Name      = v.Name,
                     ViewType  = v.ViewType.ToString(),
                     LevelName = GetViewLevelName(v),
@@ -72,7 +72,7 @@ namespace RevitMcpAddin.Handlers
                       ?? throw new ArgumentException("Invalid request body.");
 
             using var tx = new Transaction(_doc, "MCP Create View");
-            tx.Start();
+            TxGuard.Start(tx);
 
             View newView = req.ViewType.ToUpperInvariant() switch
             {
@@ -85,11 +85,11 @@ namespace RevitMcpAddin.Handlers
             if (!string.IsNullOrEmpty(req.Name))
                 newView.Name = req.Name;
 
-            tx.Commit();
+            TxGuard.Commit(tx);
 
             var dto = new ViewDto
             {
-                Id       = newView.Id.IntegerValue,
+                Id       = newView.Id.Value,
                 Name     = newView.Name,
                 ViewType = newView.ViewType.ToString(),
                 Scale    = newView.Scale
@@ -100,7 +100,7 @@ namespace RevitMcpAddin.Handlers
         // ─── 截圖 ─────────────────────────────────────────────────────────────
         public string TakeScreenshot(long viewId)
         {
-            var view = _doc.GetElement(new ElementId((int)viewId)) as View
+            var view = _doc.GetElement(ElementIdCompat.NewId(viewId)) as View
                        ?? throw new InvalidOperationException($"View {viewId} not found.");
 
             var outPath = Path.Combine(
@@ -120,9 +120,9 @@ namespace RevitMcpAddin.Handlers
             opts.SetViewsAndSheets(new List<ElementId> { view.Id });
 
             using var tx = new Transaction(_doc, "MCP Screenshot");
-            tx.Start();
+            TxGuard.Start(tx);
             _doc.ExportImage(opts);
-            tx.Commit();
+            TxGuard.Commit(tx);
 
             // Revit 會自動在檔名後加後綴，找實際輸出的檔案
             var dir  = Path.GetDirectoryName(outPath)!;

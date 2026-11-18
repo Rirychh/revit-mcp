@@ -40,7 +40,7 @@ namespace RevitMcpAddin.Handlers
             var activeId = DesignOption.GetActiveDesignOptionId(doc);
             var opts = new FilteredElementCollector(doc).OfClass(typeof(DesignOption)).Cast<DesignOption>().ToList();
 
-            var counts = new Dictionary<int, int>();
+            var counts = new Dictionary<long, int>();
             int mainCount = 0;
             foreach (var e in new FilteredElementCollector(doc).WhereElementIsNotElementType())
             {
@@ -50,30 +50,30 @@ namespace RevitMcpAddin.Handlers
                 DesignOption? d = null;
                 try { d = e.DesignOption; } catch { }
                 if (d == null) { mainCount++; continue; }
-                int k = d.Id.IntegerValue;
+                long k = d.Id.Value;
                 counts[k] = counts.TryGetValue(k, out var c) ? c + 1 : 1;
             }
 
             var sets = opts
-                .GroupBy(o => o.get_Parameter(BuiltInParameter.OPTION_SET_ID)?.AsElementId()?.IntegerValue ?? -1)
+                .GroupBy(o => o.get_Parameter(BuiltInParameter.OPTION_SET_ID)?.AsElementId()?.Value ?? -1)
                 .Select(g => new
                 {
                     setId = g.Key,
-                    setName = g.Key > 0 ? (doc.GetElement(new ElementId(g.Key))?.Name ?? "") : "",
+                    setName = g.Key > 0 ? (doc.GetElement(ElementIdCompat.NewId(g.Key))?.Name ?? "") : "",
                     options = g.Select(o => new
                     {
-                        id = o.Id.IntegerValue,
+                        id = o.Id.Value,
                         name = o.Name,
                         isPrimary = o.IsPrimary,
                         isActive = o.Id == activeId,
-                        modelElements = counts.TryGetValue(o.Id.IntegerValue, out var n) ? n : 0
+                        modelElements = counts.TryGetValue(o.Id.Value, out var n) ? n : 0
                     }).ToList()
                 }).ToList();
 
             return Ok(new
             {
                 document = doc.Title,
-                activeOptionId = activeId == ElementId.InvalidElementId ? -1 : activeId.IntegerValue,
+                activeOptionId = activeId == ElementId.InvalidElementId ? -1 : activeId.Value,
                 activeOptionName = activeId == ElementId.InvalidElementId ? "（主模型）" : (doc.GetElement(activeId)?.Name ?? ""),
                 mainModelElements = mainCount,
                 sets,
@@ -95,7 +95,7 @@ namespace RevitMcpAddin.Handlers
             var ok = new List<ElementId>(); var missing = new List<long>();
             foreach (var i in req.Ids ?? new List<long>())
             {
-                var id = new ElementId((int)i);
+                var id = ElementIdCompat.NewId(i);
                 if (doc.GetElement(id) != null) ok.Add(id); else missing.Add(i);
             }
             uidoc.Selection.SetElementIds(ok);

@@ -54,7 +54,7 @@ namespace RevitMcpAddin.Handlers
                 var ldoc = li.GetLinkDocument();
                 if (ldoc == null) { res.UnloadedLinks.Add(li.Name); continue; }
                 if (source.Length > 0 && !Has(ldoc.Title, source) && !Has(li.Name, source)) continue;
-                res.SearchedSources.Add($"{ldoc.Title} (instance {li.Id.IntegerValue})");
+                res.SearchedSources.Add($"{ldoc.Title} (instance {li.Id.Value})");
 
                 var xf = li.GetTotalTransform();
                 foreach (var e in new FilteredElementCollector(ldoc)
@@ -89,7 +89,7 @@ namespace RevitMcpAddin.Handlers
 
                     var dto = new LinkedElementDto
                     {
-                        Id = e.Id.IntegerValue, Source = ldoc.Title, LinkInstanceId = li.Id.IntegerValue,
+                        Id = e.Id.Value, Source = ldoc.Title, LinkInstanceId = li.Id.Value,
                         Category = e.Category?.Name ?? "", FamilyName = famName, TypeName = typeName,
                         Mark = markVal, LevelName = lvName, BboxMin = bmin, BboxMax = bmax,
                     };
@@ -189,7 +189,7 @@ namespace RevitMcpAddin.Handlers
                     return p.AsValueString() ?? p.AsDouble().ToString(CultureInfo.InvariantCulture);
                 case StorageType.Integer:   return p.AsValueString() ?? p.AsInteger().ToString();
                 case StorageType.String:    return p.AsString();
-                case StorageType.ElementId: return p.AsValueString() ?? p.AsElementId().IntegerValue.ToString();
+                case StorageType.ElementId: return p.AsValueString() ?? p.AsElementId().Value.ToString();
             }
             return null;
         }

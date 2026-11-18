@@ -5,6 +5,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { revitRequest } from "../services/revitClient.js";
+import { applyArg, preflightResult } from "../services/preflight.js";
 
 /** 幾何一律 mm、專案座標。Revit 內部英呎換算在 add-in 端處理。 */
 
@@ -100,12 +101,14 @@ Args:
           elevationMm: z.number(),
         })).min(1).max(400),
         skipExisting: z.boolean().default(true),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (params) => {
       try {
         const r = await revitRequest<CreateLevelsResult>("post", "/levels", undefined, params);
+        const pf = preflightResult(r); if (pf) return pf;
         const sample = r.levels.slice(0, 8)
           .map(l => `  - [${l.id}] ${l.name} @ ${l.elevation.toFixed(0)} mm`).join("\n");
         const text = `✅ 建立標高 **${r.created}** 個`
@@ -180,12 +183,14 @@ Args:
         })).min(1),
         minSegmentMm: z.number().default(2),
         structural:   z.boolean().default(false),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (params) => {
       try {
         const r = await revitRequest<CreateWallsResult>("post", "/walls", undefined, params);
+        const pf = preflightResult(r); if (pf) return pf;
         const text = `✅ 在 **${r.levelName}** 建立牆 **${r.created}** 道（型別：${r.wallTypeUsed}）`
           + skipBlock(r.skipped);
         return { content: [{ type: "text", text }], structuredContent: r as unknown as Record<string, unknown> };
@@ -226,12 +231,14 @@ Args:
           openings:       z.array(z.array(Pt).min(3)).optional(),
           heightOffsetMm: z.number().default(0),
         })).min(1),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (params) => {
       try {
         const r = await revitRequest<CreateFloorsResult>("post", "/floors", undefined, params);
+        const pf = preflightResult(r); if (pf) return pf;
         const text = `✅ 建立樓板 **${r.created}** 片，挑空開口 **${r.openings}** 處`
           + `（型別：${r.floorTypeUsed}）` + skipBlock(r.skipped);
         return { content: [{ type: "text", text }], structuredContent: r as unknown as Record<string, unknown> };
@@ -266,12 +273,14 @@ Args:
         diameterMm: z.number().positive().optional(),
         baseMm:     z.number().default(0),
         topMm:      z.number(),
+        apply: applyArg,
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (params) => {
       try {
         const r = await revitRequest<CreateColumnsResult>("post", "/columns", undefined, params);
+        const pf = preflightResult(r); if (pf) return pf;
         const text = `✅ 建立圓柱 **${r.created}** 支` + skipBlock(r.skipped);
         return { content: [{ type: "text", text }], structuredContent: r as unknown as Record<string, unknown> };
       } catch (e) {
